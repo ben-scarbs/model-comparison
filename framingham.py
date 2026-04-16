@@ -10,6 +10,7 @@ from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
+from sklearn.svm import SVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
 from sklearn.metrics import roc_auc_score, RocCurveDisplay
@@ -56,9 +57,7 @@ x_train, x_val, y_train, y_val = train_test_split(x_tval, y_tval, test_size=0.1,
 class_imbalance_weight = (y_train == 0).sum() / (y_train == 1).sum()
 
 
-#----Logistic Regression----
-
-# preprocessing pipeline
+#----Preprocessing----
 def edu_step_function(values):
     rounded = np.rint(values)
     return np.clip(rounded, 1, 4)
@@ -67,35 +66,38 @@ def rounding_function(values):
     rounded = np.rint(values)
     return np.clip(rounded, 0, None)
 
-LR_numeric_pipeline = Pipeline([
+numeric_pipeline = Pipeline([
     ('imputer', IterativeImputer(max_iter=5, initial_strategy='median', random_state=0)),
     ('scaler', StandardScaler())
 ])
 
-LR_int_pipeline = Pipeline([
+int_pipeline = Pipeline([
     ('imputer', IterativeImputer(max_iter=5, initial_strategy='median', random_state=0)),
     ('round', FunctionTransformer(rounding_function, validate=False)),
     ('scaler', StandardScaler())
 ])
 
-LR_education_pipeline = Pipeline([
+education_pipeline = Pipeline([
     ('imputer', SimpleImputer(strategy='most_frequent')),
     ('bucket', FunctionTransformer(edu_step_function, validate=False))
 ])
 
-LR_binary_pipeline = Pipeline([
+binary_pipeline = Pipeline([
     ('imputer', SimpleImputer(strategy='most_frequent'))
 ])
 
 preprocessing_pipeline = ColumnTransformer(
     transformers=[
-        ('numeric', LR_numeric_pipeline, numeric_features),
-        ('cigs', LR_int_pipeline, ['cigsPerDay']),
-        ('education', LR_education_pipeline, ['education']),
-        ('binary', LR_binary_pipeline, binary_features)
+        ('numeric', numeric_pipeline, numeric_features),
+        ('cigs', int_pipeline, ['cigsPerDay']),
+        ('education', education_pipeline, ['education']),
+        ('binary', binary_pipeline, binary_features)
     ],
     remainder=StandardScaler()
 )
+
+
+#----Logisitc Regression----
 
 # base (untuned) model
 LR_base_model_pipeline = Pipeline([
@@ -233,6 +235,63 @@ if XGB_hp_tuning:
     print(f"ROC_AUC Base: {XGB_base_score}; Untuned:{XGB_pretuned_score}; Tuned: {XGB_tuned_score}")
     print(XGB_search.best_params_)
 
+#----Support Vevtor Machine (SVM)----
+
+# base (untuned) model
+SVM_base_model_pipeline = Pipeline([
+        ("preprocessing", preprocessing_pipeline),
+        ("model", SVC(kernel= "rbf"))
+    ])
+
+# tuned model
+SVM_tuned_model_pipeline = Pipeline([
+    ('preprocessing', preprocessing_pipeline),
+    ('model', SVC(
+        kernel = "rbf",
+        C = 1.0,
+        gamma = "scale"
+    ))
+])
+
+# Hyperparameter Tuning
+# SVM_hp_tuning = True to run hyperparameter tuning
+SVM_hp_tuning = False
+
+if SVM_hp_tuning:
+    # SVM Hyperparameter Tuning
+    SVM_param_space = {
+        "model__C": Real(1e-5, 1e5, prior="log-uniform"),
+        "model__gamma": Real(1e-5, 1e5, prior="log-uniform"),
+    }
+
+    SVM_search = BayesSearchCV(
+        estimator=SVM_tuned_model_pipeline,
+        search_spaces=SVM_param_space,
+        n_iter=100,
+        scoring='roc_auc',
+        cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
+        n_jobs=-1,
+        random_state=0,
+        refit=True
+    )
+
+    # model comparison
+    SVM_base_model = SVM_base_model_pipeline.fit(x_train, y_train)
+    SVM_base_score = roc_auc_score(y_val, SVM_base_model.predict_proba(x_val)[:,1])
+
+    SVM_pretuned_model = SVM_tuned_model_pipeline.fit(x_train, y_train)
+    SVM_pretuned_score = roc_auc_score(y_val, SVM_pretuned_model.predict_proba(x_val)[:,1])
+
+    SVM_search.fit(x_train, y_train)
+    SVM_tuned_model = SVM_search.best_estimator_
+    SVM_tuned_score = roc_auc_score(y_val, SVM_tuned_model.predict_proba(x_val)[:,1])
+
+    print("SVM:")
+    print(f"Best score: {SVM_search.best_score_}")
+    print(f"ROC_AUC Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
+    print(SVM_search.best_params_)
+
+
 #----Testing Models----
 plot_ROC = False
 if plot_ROC:
@@ -244,17 +303,22 @@ if plot_ROC:
     XGB_train_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
     XGB_test_score = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
 
+    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
+    SVM_train_score = roc_auc_score(y_tval, SVM_test_model.predict_proba(x_tval)[:,1])
+    SVM_test_score = roc_auc_score(y_test, SVM_test_model.predict_proba(x_test)[:,1])
+
     print(f"LR ROC AUC| Train: {LR_train_score} Test: {LR_test_score}")
     print(f"XGB ROC AUC| Train: {XGB_train_score} Test: {XGB_test_score}")
+    print(f"SVM ROC AUC| Train: {SVM_train_score} Test: {SVM_test_score}")
 
     axes = plt.gca()
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=LR_test_model.predict_proba(x_test)[:,1], ax=axes, name="Logisstic Regression")
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=XGB_test_model.predict_proba(x_test)[:,1], ax=axes, name="XGBoost")
+    RocCurveDisplay.from_predictions(y_true=y_test, y_score=SVM_test_model.predict_proba(x_test)[:,1], ax=axes, name="SVM")
 
     plt.tight_layout()
     plt.show()
 
-#??? compare imputing vs removing missings
 
 #----Data Analysis----
 # Feature Importance:
@@ -294,12 +358,18 @@ if SHAP:
     XGB_SHAP_values = XGB_explainer(x_test)[:, :, 1]
     XGB_SHAP_importance = np.abs(XGB_SHAP_values.values).mean(axis=0)
     
+    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
+    SVM_explainer = shap.Explainer(SVM_test_model.predict_proba, x_tval)
+    SVM_SHAP_values = SVM_explainer(x_test)[:, :, 1]
+    SVM_SHAP_importance = np.abs(SVM_SHAP_values.values).mean(axis=0)
+
     # Plot bars by shifting x-positions
     x_axis_locations = np.arange(len(x.columns))
-    width = 0.35
+    width = 0.25
     fig, ax = plt.subplots()
     ax.bar(x_axis_locations - width/2, LR_SHAP_importance, width=width, label="Logistic Regression")
-    ax.bar(x_axis_locations + width/2, XGB_SHAP_importance, width=width, label="XGBoost")
+    ax.bar(x_axis_locations, XGB_SHAP_importance, width=width, label="XGBoost")
+    ax.bar(x_axis_locations + width/2, SVM_SHAP_importance, width=width, label="SVM")
 
     # Add labels and formatting
     ax.set_xticks(x_axis_locations, rotation=60, ha="right", labels=x.columns)
@@ -314,3 +384,5 @@ if SHAP:
 #   logistic regression model from scratch
 #   plot training and compare to other models
 #   MLP using pytorch (small dataset so won't perform well)
+
+#   SVM (scikit-learn)
