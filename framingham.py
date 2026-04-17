@@ -255,7 +255,7 @@ SVM_tuned_model_pipeline = Pipeline([
 
 # Hyperparameter Tuning
 # SVM_hp_tuning = True to run hyperparameter tuning
-SVM_hp_tuning = False
+SVM_hp_tuning = True
 
 if SVM_hp_tuning:
     # SVM Hyperparameter Tuning
@@ -277,14 +277,14 @@ if SVM_hp_tuning:
 
     # model comparison
     SVM_base_model = SVM_base_model_pipeline.fit(x_train, y_train)
-    SVM_base_score = roc_auc_score(y_val, SVM_base_model.predict_proba(x_val)[:,1])
+    SVM_base_score = roc_auc_score(y_val, SVM_base_model.decision_function(x_val))
 
     SVM_pretuned_model = SVM_tuned_model_pipeline.fit(x_train, y_train)
-    SVM_pretuned_score = roc_auc_score(y_val, SVM_pretuned_model.predict_proba(x_val)[:,1])
+    SVM_pretuned_score = roc_auc_score(y_val, SVM_pretuned_model.decision_function(x_val))
 
     SVM_search.fit(x_train, y_train)
     SVM_tuned_model = SVM_search.best_estimator_
-    SVM_tuned_score = roc_auc_score(y_val, SVM_tuned_model.predict_proba(x_val)[:,1])
+    SVM_tuned_score = roc_auc_score(y_val, SVM_tuned_model.decision_function(x_val))
 
     print("SVM:")
     print(f"Best score: {SVM_search.best_score_}")
@@ -331,7 +331,7 @@ if plot_ROC:
 #   - XGBoost Feature Gain (week 9)
 
 #   Mutual Information
-MI = True
+MI = False
 if MI:
     mutual_info = pd.Series(
         mutual_info_classif(
@@ -346,7 +346,7 @@ if MI:
     plt.show()
 
 #   SHAP
-SHAP = True
+SHAP = False
 if SHAP:
     LR_test_model = LR_tuned_model_pipeline.fit(x_tval, y_tval)
     LR_explainer = shap.Explainer(LR_test_model.predict_proba, x_tval)
