@@ -248,20 +248,23 @@ SVM_tuned_model_pipeline = Pipeline([
     ('preprocessing', preprocessing_pipeline),
     ('model', SVC(
         kernel = "rbf",
-        C = 1.0,
-        gamma = "scale"
+        C = 8470189.161873985,
+        gamma = 1.0494718319326697e-05,
+        class_weight = None
+        # CV score: 0.7871063576945929
     ))
 ])
 
 # Hyperparameter Tuning
 # SVM_hp_tuning = True to run hyperparameter tuning
-SVM_hp_tuning = True
+SVM_hp_tuning = False
 
 if SVM_hp_tuning:
     # SVM Hyperparameter Tuning
     SVM_param_space = {
-        "model__C": Real(1e-5, 1e5, prior="log-uniform"),
-        "model__gamma": Real(1e-5, 1e5, prior="log-uniform"),
+        "model__C": Real(1, 1e9, prior="log-uniform"),
+        "model__gamma": Real(1e-9, 1, prior="log-uniform"),
+        "model__class_weight": Categorical([None])
     }
 
     SVM_search = BayesSearchCV(
@@ -293,19 +296,22 @@ if SVM_hp_tuning:
 
 
 #----Testing Models----
-plot_ROC = False
+plot_ROC = True
 if plot_ROC:
     LR_test_model = LR_tuned_model_pipeline.fit(x_tval, y_tval)
     LR_train_score = roc_auc_score(y_tval, LR_test_model.predict_proba(x_tval)[:,1])
     LR_test_score = roc_auc_score(y_test, LR_test_model.predict_proba(x_test)[:,1])
+    print("LR finished...")
 
     XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval, y_tval)
     XGB_train_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
     XGB_test_score = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
+    print("XGB finished...")
 
     SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
-    SVM_train_score = roc_auc_score(y_tval, SVM_test_model.predict_proba(x_tval)[:,1])
-    SVM_test_score = roc_auc_score(y_test, SVM_test_model.predict_proba(x_test)[:,1])
+    SVM_train_score = roc_auc_score(y_tval, SVM_test_model.decision_function(x_tval))
+    SVM_test_score = roc_auc_score(y_test, SVM_test_model.decision_function(x_test))
+    print("SVM finished...")
 
     print(f"LR ROC AUC| Train: {LR_train_score} Test: {LR_test_score}")
     print(f"XGB ROC AUC| Train: {XGB_train_score} Test: {XGB_test_score}")
@@ -314,7 +320,7 @@ if plot_ROC:
     axes = plt.gca()
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=LR_test_model.predict_proba(x_test)[:,1], ax=axes, name="Logisstic Regression")
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=XGB_test_model.predict_proba(x_test)[:,1], ax=axes, name="XGBoost")
-    RocCurveDisplay.from_predictions(y_true=y_test, y_score=SVM_test_model.predict_proba(x_test)[:,1], ax=axes, name="SVM")
+    RocCurveDisplay.from_predictions(y_true=y_test, y_score=SVM_test_model.decision_function(x_test), ax=axes, name="SVM")
 
     plt.tight_layout()
     plt.show()
