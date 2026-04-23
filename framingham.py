@@ -13,7 +13,7 @@ from xgboost import XGBClassifier
 from sklearn.svm import SVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
-from sklearn.metrics import roc_auc_score, RocCurveDisplay
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, RocCurveDisplay
 from sklearn.feature_selection import mutual_info_classif
 import shap
 
@@ -24,6 +24,11 @@ df = pd.read_csv(file)
 x = df.drop(columns="TenYearCHD")
 y = df["TenYearCHD"]
 
+# Class balances
+negative_class_num = (y == 0).sum()
+positive_class_num = (y == 1).sum()
+print(positive_class_num / y.size)
+
 # cigsPerDay=0 when cuurentSmoker=0
 x.loc[x['currentSmoker'] == 0, 'cigsPerDay'] = 0
 
@@ -32,13 +37,12 @@ missings_feature = False
 if missings_feature:
     df["Nissings"] = x.isna().sum(axis=1)
 
-#----pandas analysis----
+#----Dataseet analysis----
 # ['male', 'age', 'education', 'currentSmoker', 'cigsPerDay', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes', 'totChol', 'sysBP', 'diaBP', 'BMI', 'heartRate', 'glucose', 'TenYearCHD']
 # contains missing: ['education', 'cigsPerDay', 'BPMeds', 'totChol', 'BMI', 'heartRate','glucose']
 numeric_features = ['age', 'sysBP', 'diaBP', 'totChol', 'BMI', 'heartRate', 'glucose']
 binary_features = ['male', 'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes']
 discrete_features = {"male", "education", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"}
-
 num_rows = df.shape[0]
 nan_rows=df.isna().any(axis=1).sum()
 print(nan_rows/num_rows)
@@ -54,7 +58,99 @@ print(nan_rows/num_rows)
 x_tval, x_test, y_tval, y_test = train_test_split(x, y, test_size=0.15, random_state=0, stratify=y, shuffle=True)
 x_train, x_val, y_train, y_val = train_test_split(x_tval, y_tval, test_size=0.1, random_state=0, stratify=y_tval)
 
-class_imbalance_weight = (y_train == 0).sum() / (y_train == 1).sum()
+class_imbalance_weight = (y_train == 0).sum() / (y_train == 1).sum()    # XGBoost class imbalance weighting uaed in tuning
+
+#----Data Augmentation/Synthesis
+# Data Modes:
+#   - "raw" = No augmentation/synthesis
+#   - "aug" = Simple data augmentation (noise injection)
+#   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
+data_mode = "raw"
+
+#   Logging tuned model params (better implmeented using a json file)
+if data_mode == "raw":
+    LR_tuned_params = {
+        # tuned params:
+        "C": 1,
+        "l1_ratio": 0.0,
+        "class_weight": None
+    }   # val ROC_AUC = 0.7843
+
+    XGB_tuned_params = {
+        #tuned params:
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": None
+    }   # val ROC_AUC = 0.7699
+
+    SVM_tuned_params = {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    }   # val ROC_AUC = 0.7871
+
+elif data_mode == "aug":
+    LR_tuned_params = {
+        # tuned params:
+        "C": 1,
+        "l1_ratio": 0.0,
+        "class_weight": None
+    }   # val ROC_AUC = ...
+
+    XGB_tuned_params = {
+        #tuned params:
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": None
+    }   # val ROC_AUC = ...
+
+    SVM_tuned_params = {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    }   # val ROC_AUC = ...
+
+elif data_mode == "syn":
+    LR_tuned_params = {
+        # tuned params:
+        "C": 1,
+        "l1_ratio": 0.0,
+        "class_weight": None
+    }   # val ROC_AUC = ...
+
+    XGB_tuned_params = {
+        #tuned params:
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": None
+    }   # val ROC_AUC = ...
+
+    SVM_tuned_params = {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    }   # val ROC_AUC = ...
 
 
 #----Preprocessing----
@@ -98,7 +194,6 @@ preprocessing_pipeline = ColumnTransformer(
 
 
 #----Logisitc Regression----
-
 # base (untuned) model
 LR_base_model_pipeline = Pipeline([
         ("preprocessing", preprocessing_pipeline),
@@ -109,15 +204,15 @@ LR_base_model_pipeline = Pipeline([
 LR_tuned_model_pipeline = Pipeline([
     ('preprocessing', preprocessing_pipeline),
     ('model', LogisticRegression(
-        penalty='elasticnet',
-        solver='saga',
-        max_iter=5000,
-        random_state=0,
-        n_jobs=-1,
-        # tuned paarams:
-        C=1,
-        l1_ratio=0.0,
-        class_weight=None
+        penalty= "elasticnet",
+        solver= "saga",
+        max_iter= 5000,
+        random_state= 0,
+        n_jobs= -1,
+        # tuned params:
+        C= LR_tuned_params["C"],
+        l1_ratio= LR_tuned_params["l1_ratio"],
+        class_weight= LR_tuned_params["class_weight"]
     ))
 ])
 
@@ -177,16 +272,16 @@ XGB_tuned_model_pipeline = XGBClassifier(
     random_state=0,
     n_jobs=-1,
     #tuned params:
-    n_estimators=475,
-    learning_rate=0.007948263801032772,
-    max_depth=2,
-    min_child_weight=6,
-    subsample=0.6767872227893332,
-    colsample_bytree=0.6,
-    gamma=1.0,
-    reg_alpha=0.0,
-    reg_lambda=0.0,
-    scale_pos_weight=None
+    n_estimators= XGB_tuned_params["n_estimators"],
+    learning_rate= XGB_tuned_params["learning_rate"],
+    max_depth= XGB_tuned_params["max_depth"],
+    min_child_weight= XGB_tuned_params["min_child_weight"],
+    subsample= XGB_tuned_params["subsample"],
+    colsample_bytree= XGB_tuned_params["colsample_bytree"],
+    gamma= XGB_tuned_params["gamma"],
+    reg_alpha= XGB_tuned_params["reg_alpha"],
+    reg_lambda= XGB_tuned_params["reg_lambda"],
+    scale_pos_weight= XGB_tuned_params["scale_pos_weight"]
 )
 
 # Hyperparameter Tuning
@@ -248,10 +343,9 @@ SVM_tuned_model_pipeline = Pipeline([
     ('preprocessing', preprocessing_pipeline),
     ('model', SVC(
         kernel = "rbf",
-        C = 8470189.161873985,
-        gamma = 1.0494718319326697e-05,
-        class_weight = None
-        # CV score: 0.7871063576945929
+        C = SVM_tuned_params["C"],
+        gamma = SVM_tuned_params["gamma"],
+        class_weight = SVM_tuned_params["class_weight"]
     ))
 ])
 
@@ -294,28 +388,64 @@ if SVM_hp_tuning:
     print(f"ROC_AUC Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
     print(SVM_search.best_params_)
 
+#----Model evaluation----
+model_eval = True
+if model_eval:
+    LR_val_model = LR_tuned_model_pipeline.fit(x_train, y_train)
+    LR_train_accuracy = accuracy_score(y_train, LR_val_model.predict(x_train))
+    LR_train_f1 = f1_score(y_train, LR_val_model.predict(x_train))
+    LR_train_score = roc_auc_score(y_train, LR_val_model.predict_proba(x_train)[:,1])
+    LR_val_accuracy = accuracy_score(y_val, LR_val_model.predict(x_val))
+    LR_val_f1 = f1_score(y_val, LR_val_model.predict(x_val))
+    LR_val_score = roc_auc_score(y_val, LR_val_model.predict_proba(x_val)[:,1])
+    print(f"LR Accuracy| Train: {LR_train_accuracy} Val: {LR_val_accuracy}")
+    print(f"LR F1| Train: {LR_train_f1} Val: {LR_val_f1}")
+    print(f"LR ROC AUC| Train: {LR_train_score} Val: {LR_val_score}")
 
-#----Testing Models----
-plot_ROC = True
+    XGB_val_model = XGB_tuned_model_pipeline.fit(x_train, y_train)
+    XGB_train_accuracy = accuracy_score(y_train, XGB_val_model.predict(x_train))
+    XGB_train_f1 = f1_score(y_train, XGB_val_model.predict(x_train))
+    XGB_train_score = roc_auc_score(y_train, XGB_val_model.predict_proba(x_train)[:,1])
+    XGB_val_accuracy = accuracy_score(y_val, XGB_val_model.predict(x_val))
+    XGB_val_f1 = f1_score(y_val, XGB_val_model.predict(x_val))
+    XGB_val_score = roc_auc_score(y_val, XGB_val_model.predict_proba(x_val)[:,1])
+    print(f"XGB Accuracy| Train: {XGB_train_accuracy} Val: {XGB_val_accuracy}")
+    print(f"XGB F1| Train: {XGB_train_f1} Val: {XGB_val_f1}")
+    print(f"XGB ROC AUC| Train: {XGB_train_score} Val: {XGB_val_score}")
+
+    SVM_val_model = SVM_tuned_model_pipeline.fit(x_train, y_train)
+    SVM_train_accuracy = accuracy_score(y_train, SVM_val_model.predict(x_train))
+    SVM_train_f1 = f1_score(y_train, SVM_val_model.predict(x_train))
+    SVM_train_score = roc_auc_score(y_train, SVM_val_model.decision_function(x_train))
+    SVM_val_accuracy = accuracy_score(y_val, SVM_val_model.predict(x_val))
+    SVM_val_f1 = f1_score(y_val, SVM_val_model.predict(x_val))
+    SVM_val_score = roc_auc_score(y_val, SVM_val_model.decision_function(x_val))
+    print(f"SVM Accuracy| Train: {SVM_train_accuracy} Val: {SVM_val_accuracy}")
+    print(f"SVM F1| Train: {SVM_train_f1} Val: {SVM_val_f1}")
+    print(f"SVM ROC AUC| Train: {SVM_train_score} Val: {SVM_val_score}")
+
+
+#----Model testing----
+plot_ROC = False
 if plot_ROC:
     LR_test_model = LR_tuned_model_pipeline.fit(x_tval, y_tval)
-    LR_train_score = roc_auc_score(y_tval, LR_test_model.predict_proba(x_tval)[:,1])
+    LR_tval_score = roc_auc_score(y_tval, LR_test_model.predict_proba(x_tval)[:,1])
     LR_test_score = roc_auc_score(y_test, LR_test_model.predict_proba(x_test)[:,1])
     print("LR finished...")
 
     XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval, y_tval)
-    XGB_train_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
+    XGB_tval_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
     XGB_test_score = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
     print("XGB finished...")
 
     SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
-    SVM_train_score = roc_auc_score(y_tval, SVM_test_model.decision_function(x_tval))
+    SVM_tval_score = roc_auc_score(y_tval, SVM_test_model.decision_function(x_tval))
     SVM_test_score = roc_auc_score(y_test, SVM_test_model.decision_function(x_test))
     print("SVM finished...")
 
-    print(f"LR ROC AUC| Train: {LR_train_score} Test: {LR_test_score}")
-    print(f"XGB ROC AUC| Train: {XGB_train_score} Test: {XGB_test_score}")
-    print(f"SVM ROC AUC| Train: {SVM_train_score} Test: {SVM_test_score}")
+    print(f"LR ROC AUC| Train: {LR_tval_score} Test: {LR_test_score}")
+    print(f"XGB ROC AUC| Train: {XGB_tval_score} Test: {XGB_test_score}")
+    print(f"SVM ROC AUC| Train: {SVM_tval_score} Test: {SVM_test_score}")
 
     axes = plt.gca()
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=LR_test_model.predict_proba(x_test)[:,1], ax=axes, name="Logisstic Regression")
@@ -326,7 +456,7 @@ if plot_ROC:
     plt.show()
 
 
-#----Data Analysis----
+#----Data/model Analysis----
 # Feature Importance:
 #   Statistical:
 #   - Mutual Information
