@@ -2,10 +2,11 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from imblearn.over_sampling import SMOTENC
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, FunctionTransformer
+from sklearn.preprocessing import StandardScaler, FunctionTransformer, OneHotEncoder
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -24,10 +25,10 @@ df = pd.read_csv(file)
 x = df.drop(columns="TenYearCHD")
 y = df["TenYearCHD"]
 
-# Class balances
-negative_class_num = (y == 0).sum()
-positive_class_num = (y == 1).sum()
-print(positive_class_num / y.size)
+# Calculate class balance
+def class_bal(labels):
+    negative_class_num = (labels == 0).sum()
+    print(f"Negative class balacne: {negative_class_num / labels.size:.4f}")
 
 # cigsPerDay=0 when cuurentSmoker=0
 x.loc[x['currentSmoker'] == 0, 'cigsPerDay'] = 0
@@ -40,12 +41,13 @@ if missings_feature:
 #----Dataseet analysis----
 # ['male', 'age', 'education', 'currentSmoker', 'cigsPerDay', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes', 'totChol', 'sysBP', 'diaBP', 'BMI', 'heartRate', 'glucose', 'TenYearCHD']
 # contains missing: ['education', 'cigsPerDay', 'BPMeds', 'totChol', 'BMI', 'heartRate','glucose']
-numeric_features = ['age', 'sysBP', 'diaBP', 'totChol', 'BMI', 'heartRate', 'glucose']
-binary_features = ['male', 'currentSmoker', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes']
-discrete_features = {"male", "education", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"}
+nominal_features = ["male", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"]
+ordinal_features = ["age", "education", "cigsPerDay"]
+continuous_features = ["totChol", "sysBP", "diaBP", "BMI", "heartRate", "glucose"]
+
 num_rows = df.shape[0]
 nan_rows=df.isna().any(axis=1).sum()
-print(nan_rows/num_rows)
+#print(nan_rows/num_rows)
 #print(df.isna().sum())
 #print(df["education"].describe())
 #print(df.columns)
@@ -60,149 +62,93 @@ x_train, x_val, y_train, y_val = train_test_split(x_tval, y_tval, test_size=0.1,
 
 class_imbalance_weight = (y_train == 0).sum() / (y_train == 1).sum()    # XGBoost class imbalance weighting uaed in tuning
 
-#----Data Augmentation/Synthesis
-# Data Modes:
-#   - "raw" = No augmentation/synthesis
-#   - "aug" = Simple data augmentation (noise injection)
-#   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
-data_mode = "raw"
-
-#   Logging tuned model params (better implmeented using a json file)
-if data_mode == "raw":
-    LR_tuned_params = {
-        # tuned params:
-        "C": 1,
-        "l1_ratio": 0.0,
-        "class_weight": None
-    }   # val ROC_AUC = 0.7843
-
-    XGB_tuned_params = {
-        #tuned params:
-        "n_estimators": 475,
-        "learning_rate": 0.007948263801032772,
-        "max_depth": 2,
-        "min_child_weight": 6,
-        "subsample": 0.6767872227893332,
-        "colsample_bytree": 0.6,
-        "gamma": 1.0,
-        "reg_alpha": 0.0,
-        "reg_lambda": 0.0,
-        "scale_pos_weight": None
-    }   # val ROC_AUC = 0.7699
-
-    SVM_tuned_params = {
-        "C": 8470189.161873985,
-        "gamma": 1.0494718319326697e-05,
-        "class_weight": None
-    }   # val ROC_AUC = 0.7871
-
-elif data_mode == "aug":
-    LR_tuned_params = {
-        # tuned params:
-        "C": 1,
-        "l1_ratio": 0.0,
-        "class_weight": None
-    }   # val ROC_AUC = ...
-
-    XGB_tuned_params = {
-        #tuned params:
-        "n_estimators": 475,
-        "learning_rate": 0.007948263801032772,
-        "max_depth": 2,
-        "min_child_weight": 6,
-        "subsample": 0.6767872227893332,
-        "colsample_bytree": 0.6,
-        "gamma": 1.0,
-        "reg_alpha": 0.0,
-        "reg_lambda": 0.0,
-        "scale_pos_weight": None
-    }   # val ROC_AUC = ...
-
-    SVM_tuned_params = {
-        "C": 8470189.161873985,
-        "gamma": 1.0494718319326697e-05,
-        "class_weight": None
-    }   # val ROC_AUC = ...
-
-elif data_mode == "syn":
-    LR_tuned_params = {
-        # tuned params:
-        "C": 1,
-        "l1_ratio": 0.0,
-        "class_weight": None
-    }   # val ROC_AUC = ...
-
-    XGB_tuned_params = {
-        #tuned params:
-        "n_estimators": 475,
-        "learning_rate": 0.007948263801032772,
-        "max_depth": 2,
-        "min_child_weight": 6,
-        "subsample": 0.6767872227893332,
-        "colsample_bytree": 0.6,
-        "gamma": 1.0,
-        "reg_alpha": 0.0,
-        "reg_lambda": 0.0,
-        "scale_pos_weight": None
-    }   # val ROC_AUC = ...
-
-    SVM_tuned_params = {
-        "C": 8470189.161873985,
-        "gamma": 1.0494718319326697e-05,
-        "class_weight": None
-    }   # val ROC_AUC = ...
-
-
-#----Preprocessing----
-def edu_step_function(values):
-    rounded = np.rint(values)
-    return np.clip(rounded, 1, 4)
-
-def rounding_function(values):
-    rounded = np.rint(values)
-    return np.clip(rounded, 0, None)
-
-numeric_pipeline = Pipeline([
-    ('imputer', IterativeImputer(max_iter=5, initial_strategy='median', random_state=0)),
-    ('scaler', StandardScaler())
+#----Data Preprocessing----
+nominal_pipeline = Pipeline([
+    ("impute", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(handle_unknown="ignore"))
 ])
 
-int_pipeline = Pipeline([
-    ('imputer', IterativeImputer(max_iter=5, initial_strategy='median', random_state=0)),
-    ('round', FunctionTransformer(rounding_function, validate=False)),
-    ('scaler', StandardScaler())
-])
-
-education_pipeline = Pipeline([
-    ('imputer', SimpleImputer(strategy='most_frequent')),
-    ('bucket', FunctionTransformer(edu_step_function, validate=False))
-])
-
-binary_pipeline = Pipeline([
-    ('imputer', SimpleImputer(strategy='most_frequent'))
+ordinal_continuous_pipeline = Pipeline([
+    ("impute", IterativeImputer(max_iter=5, initial_strategy="median", random_state=0)),
+    ("scale", StandardScaler())
 ])
 
 preprocessing_pipeline = ColumnTransformer(
     transformers=[
-        ('numeric', numeric_pipeline, numeric_features),
-        ('cigs', int_pipeline, ['cigsPerDay']),
-        ('education', education_pipeline, ['education']),
-        ('binary', binary_pipeline, binary_features)
-    ],
-    remainder=StandardScaler()
+        ("nominal", nominal_pipeline(), nominal_features),
+        ("ordinal_continuous", ordinal_continuous_pipeline(), ordinal_features+continuous_features),
+    ]
 )
+
+x_processed, y_processed = preprocessing_pipeline.fit_transform(x, y)
+x_train_processed, y_train_processed = preprocessing_pipeline.fit_transform(x_train, y_train)
+x_tval_processed, y_tval_processed = preprocessing_pipeline.fit_transform(x_tval, y_tval)
+x_val_processed, y_val_processed = preprocessing_pipeline.fit_transform(x_val, y_val)
+x_test_processed, y_test_processed = preprocessing_pipeline.fit_transform(x_test, y_test)
+
+# Data Modes:
+data_mode = "smo"
+#   - "raw" = No augmentation/synthesis
+#   - "smo" = Data synthesis using interpolated oversampling (SMOTE)
+#   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
+
+if data_mode == "raw":
+    x_train_oversampled, y_train_oversampled = preprocessing_pipeline.fit_transform(x_train, y_train)
+    x_tval_oversampled, y_tval_oversampled = preprocessing_pipeline.fit_transform(x_tval, y_tval)
+    x_train_oversampled_XGB, y_train_oversampled_XGB = x_train_oversampled, y_train_oversampled
+    x_tval_oversampled_XGB, y_tval_oversampled_XGB = x_tval_oversampled, y_tval_oversampled
+
+elif data_mode == "smo":
+    #--SMOTE data synthesis--
+    smote = SMOTENC(categorical_features= nominal_features)
+    preprocessing_pipeline.steps.append(("synthesis", smote()))
+
+    x_train_oversampled, y_train_oversampled = preprocessing_pipeline.fit_transform(x_train, y_train)
+    x_tval_oversampled, y_tval_oversampled = preprocessing_pipeline.fit_transform(x_tval, y_tval)
+
+    train_synthetic_mask = ~x_train_oversampled.isin(x_train_processed)
+    x_train_synthetic = x_train_oversampled[train_synthetic_mask]
+    y_train_synthetic = y_train_oversampled[train_synthetic_mask]
+    x_train_oversampled_XGB = pd.concat([x_train, x_train_synthetic])
+    y_train_oversampled_XGB = pd.concat([y_train, y_train_synthetic])
+
+    tval_synthetic_mask = ~x_tval_oversampled.isin(x_tval_processed)
+    x_tval_synthetic = x_tval_oversampled[tval_synthetic_mask]
+    y_tval_synthetic = y_tval_oversampled[tval_synthetic_mask]
+    x_tval_oversampled_XGB = pd.concat([x_tval, x_tval_synthetic])
+    y_tval_oversampled_XGB = pd.concat([y_tval, y_tval_synthetic])
 
 
 #----Logisitc Regression----
+#--Model Hyperparameters--
+LR_params = {
+    #LR Val: Accuracy = 0.8532 | F1 = 0.0702 | ROC AUC = 0.7843
+    "raw": {
+        "C": 0.04497912998619529,
+        "l1_ratio": 0.06363016933620981,
+        "class_weight": "balanced"
+    },
+    #LR Val:...
+    "smo": {
+        "C": 1,
+        "l1_ratio": 0.0,
+        "class_weight": None
+    },
+    #LR Val:...
+    "syn": {
+        "C": 1,
+        "l1_ratio": 0.0,
+        "class_weight": None
+    }
+}
+
 # base (untuned) model
 LR_base_model_pipeline = Pipeline([
-        ("preprocessing", preprocessing_pipeline),
         ("model", LogisticRegression())
     ])
 
 # tuned model
 LR_tuned_model_pipeline = Pipeline([
-    ('preprocessing', preprocessing_pipeline),
     ('model', LogisticRegression(
         penalty= "elasticnet",
         solver= "saga",
@@ -210,9 +156,9 @@ LR_tuned_model_pipeline = Pipeline([
         random_state= 0,
         n_jobs= -1,
         # tuned params:
-        C= LR_tuned_params["C"],
-        l1_ratio= LR_tuned_params["l1_ratio"],
-        class_weight= LR_tuned_params["class_weight"]
+        C= LR_params[data_mode]["C"],
+        l1_ratio= LR_params[data_mode]["l1_ratio"],
+        class_weight= LR_params[data_mode]["class_weight"]
     ))
 ])
 
@@ -231,28 +177,29 @@ if LR_hp_tuning:
     LR_search = BayesSearchCV(
         estimator=LR_tuned_model_pipeline,
         search_spaces=LR_param_space,
-        n_iter=100,
-        scoring='roc_auc',
+        n_iter=150,
+        scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
+        verbose=1,
         refit=True
     )
 
     # model comparison
-    LR_base_model = LR_base_model_pipeline.fit(x_train, y_train)
-    LR_base_score = roc_auc_score(y_val, LR_base_model.predict_proba(x_val)[:,1])
+    LR_base_model = LR_base_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    LR_base_score = f1_score(y_val_processed, LR_base_model.predict(x_val_processed))
 
-    LR_pretuned_model = LR_tuned_model_pipeline.fit(x_train, y_train)
-    LR_pretuned_score = roc_auc_score(y_val, LR_pretuned_model.predict_proba(x_val)[:,1])
+    LR_pretuned_model = LR_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    LR_pretuned_score = f1_score(y_val_processed, LR_pretuned_model.predict(x_val_processed))
 
-    LR_search.fit(x_train, y_train)
+    LR_search.fit(x_train_oversampled, y_train_oversampled)
     LR_tuned_model = LR_search.best_estimator_
-    LR_tuned_score = roc_auc_score(y_val, LR_tuned_model.predict_proba(x_val)[:,1])
+    LR_tuned_score = f1_score(y_val_processed, LR_tuned_model.predict(x_val_processed))
 
     print("Logistic Regression:")
     print(f"Best score: {LR_search.best_score_}")
-    print(f"ROC_AUC Base: {LR_base_score}; Untuned:{LR_pretuned_score}; Tuned: {LR_tuned_score}")
+    print(f"F1 | Base: {LR_base_score}; Untuned:{LR_pretuned_score}; Tuned: {LR_tuned_score}")
     print(LR_search.best_params_)
 
 
@@ -261,28 +208,73 @@ if LR_hp_tuning:
 # no scaling necessary for trees
 # xgboost handles missing/nan
 
+#--Model Hyperparameters--
+XGB_params = {
+    #XGB Val: Accuracy = 0.7036 | F1 = 0.4398 | ROC AUC = 0.7607
+    "raw": {
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": class_imbalance_weight
+    },
+    #XGB Val:...
+    "smo": {
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": None
+    },
+    #XGb Val:...
+    "syn": {
+        "n_estimators": 475,
+        "learning_rate": 0.007948263801032772,
+        "max_depth": 2,
+        "min_child_weight": 6,
+        "subsample": 0.6767872227893332,
+        "colsample_bytree": 0.6,
+        "gamma": 1.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 0.0,
+        "scale_pos_weight": None
+    }
+}
+
 # base (untuned) model
 XGB_base_model_pipeline = XGBClassifier()
 
 # tuned model
-XGB_tuned_model_pipeline = XGBClassifier(
-    objective='binary:logistic',
-    eval_metric='logloss',
-    tree_method='hist',
-    random_state=0,
-    n_jobs=-1,
-    #tuned params:
-    n_estimators= XGB_tuned_params["n_estimators"],
-    learning_rate= XGB_tuned_params["learning_rate"],
-    max_depth= XGB_tuned_params["max_depth"],
-    min_child_weight= XGB_tuned_params["min_child_weight"],
-    subsample= XGB_tuned_params["subsample"],
-    colsample_bytree= XGB_tuned_params["colsample_bytree"],
-    gamma= XGB_tuned_params["gamma"],
-    reg_alpha= XGB_tuned_params["reg_alpha"],
-    reg_lambda= XGB_tuned_params["reg_lambda"],
-    scale_pos_weight= XGB_tuned_params["scale_pos_weight"]
-)
+XGB_tuned_model_pipeline = Pipeline(steps=[
+    XGBClassifier(
+        objective='binary:logistic',
+        eval_metric='logloss',
+        tree_method='hist',
+        random_state=0,
+        n_jobs=-1,
+        #tuned params:
+        n_estimators= XGB_params[data_mode]["n_estimators"],
+        learning_rate= XGB_params[data_mode]["learning_rate"],
+        max_depth= XGB_params[data_mode]["max_depth"],
+        min_child_weight= XGB_params[data_mode]["min_child_weight"],
+        subsample= XGB_params[data_mode]["subsample"],
+        colsample_bytree= XGB_params[data_mode]["colsample_bytree"],
+        gamma= XGB_params[data_mode]["gamma"],
+        reg_alpha= XGB_params[data_mode]["reg_alpha"],
+        reg_lambda= XGB_params[data_mode]["reg_lambda"],
+        scale_pos_weight= XGB_params[data_mode]["scale_pos_weight"]
+    )
+])
 
 # Hyperparameter Tuning
 # XGB_hp_tuning = True to run hyperparameter tuning
@@ -300,52 +292,72 @@ if XGB_hp_tuning:
         "gamma": Real(0.0, 1.0),
         "reg_alpha": Real(0.0, 1.0),
         "reg_lambda": Real(0.0, 5.0),
-        "scale_pos_weight": Categorical([None, class_imbalance_weight])
+        "scale_pos_weight": Real(1.0, class_imbalance_weight)
     }
 
     XGB_search = BayesSearchCV(
         estimator=XGB_tuned_model_pipeline,
         search_spaces=XGB_param_space,
-        n_iter=250,
-        scoring='roc_auc',
+        n_iter=200,
+        scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
+        verbose=1,
         refit=True
     )
 
     # model comparison
-    XGB_base_model = XGB_base_model_pipeline.fit(x_train, y_train)
-    XGB_base_score = roc_auc_score(y_val, XGB_base_model.predict_proba(x_val)[:,1])
+    XGB_base_model = XGB_base_model_pipeline.fit(x_train_oversampled_XGB, y_train_oversampled_XGB)
+    XGB_base_score = f1_score(y_val, XGB_base_model.predict(x_val))
 
-    XGB_pretuned_model = XGB_tuned_model_pipeline.fit(x_train, y_train)
-    XGB_pretuned_score = roc_auc_score(y_val, XGB_pretuned_model.predict_proba(x_val)[:,1])
+    XGB_pretuned_model = XGB_tuned_model_pipeline.fit(x_train_oversampled_XGB, y_train_oversampled_XGB)
+    XGB_pretuned_score = f1_score(y_val, XGB_pretuned_model.predict(x_val))
 
-    XGB_search.fit(x_train, y_train)
+    XGB_search.fit(x_train_oversampled_XGB, y_train_oversampled_XGB)
     XGB_tuned_model = XGB_search.best_estimator_
-    XGB_tuned_score = roc_auc_score(y_val, XGB_tuned_model.predict_proba(x_val)[:,1])
+    XGB_tuned_score = f1_score(y_val, XGB_tuned_model.predict(x_val))
 
     print("XGBoost:")
     print(f"Best score: {XGB_search.best_score_}")
-    print(f"ROC_AUC Base: {XGB_base_score}; Untuned:{XGB_pretuned_score}; Tuned: {XGB_tuned_score}")
+    print(f"F1 | Base: {XGB_base_score}; Untuned:{XGB_pretuned_score}; Tuned: {XGB_tuned_score}")
     print(XGB_search.best_params_)
 
 #----Support Vevtor Machine (SVM)----
+#--Model Hyperparameters--
+SVM_params = {
+    #SVM Val: Accuracy = 0.8504 | F1 = 0.0690 | ROC AUC = 0.7871
+    "raw": {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    },
+    #SVM Val:...
+    "smo": {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    },
+    #SVM Val:...
+    "syn": {
+        "C": 8470189.161873985,
+        "gamma": 1.0494718319326697e-05,
+        "class_weight": None
+    }
+}
 
 # base (untuned) model
 SVM_base_model_pipeline = Pipeline([
-        ("preprocessing", preprocessing_pipeline),
         ("model", SVC(kernel= "rbf"))
     ])
 
 # tuned model
 SVM_tuned_model_pipeline = Pipeline([
-    ('preprocessing', preprocessing_pipeline),
     ('model', SVC(
         kernel = "rbf",
-        C = SVM_tuned_params["C"],
-        gamma = SVM_tuned_params["gamma"],
-        class_weight = SVM_tuned_params["class_weight"]
+        C = SVM_params[data_mode]["C"],
+        gamma = SVM_params[data_mode]["gamma"],
+        class_weight = SVM_params[data_mode]["class_weight"]
     ))
 ])
 
@@ -358,89 +370,99 @@ if SVM_hp_tuning:
     SVM_param_space = {
         "model__C": Real(1, 1e9, prior="log-uniform"),
         "model__gamma": Real(1e-9, 1, prior="log-uniform"),
-        "model__class_weight": Categorical([None])
+        "model__class_weight": Categorical([None, "balanced"])
     }
 
     SVM_search = BayesSearchCV(
         estimator=SVM_tuned_model_pipeline,
         search_spaces=SVM_param_space,
-        n_iter=100,
-        scoring='roc_auc',
+        n_iter=150,
+        scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
+        verbose=1,
         refit=True
     )
 
     # model comparison
-    SVM_base_model = SVM_base_model_pipeline.fit(x_train, y_train)
-    SVM_base_score = roc_auc_score(y_val, SVM_base_model.decision_function(x_val))
+    SVM_base_model = SVM_base_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    SVM_base_score = f1_score(y_val_processed, SVM_base_model.predict(x_val_processed))
 
-    SVM_pretuned_model = SVM_tuned_model_pipeline.fit(x_train, y_train)
-    SVM_pretuned_score = roc_auc_score(y_val, SVM_pretuned_model.decision_function(x_val))
+    SVM_pretuned_model = SVM_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    SVM_pretuned_score = f1_score(y_val_processed, SVM_pretuned_model.predict(x_val_processed))
 
-    SVM_search.fit(x_train, y_train)
+    SVM_search.fit(x_train_oversampled, y_train_oversampled)
     SVM_tuned_model = SVM_search.best_estimator_
-    SVM_tuned_score = roc_auc_score(y_val, SVM_tuned_model.decision_function(x_val))
+    SVM_tuned_score = f1_score(y_val_processed, SVM_tuned_model.predict(x_val_processed))
 
     print("SVM:")
     print(f"Best score: {SVM_search.best_score_}")
-    print(f"ROC_AUC Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
+    print(f"F1 | Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
     print(SVM_search.best_params_)
 
 #----Model evaluation----
-model_eval = True
+model_eval = False
 if model_eval:
-    LR_val_model = LR_tuned_model_pipeline.fit(x_train, y_train)
-    LR_train_accuracy = accuracy_score(y_train, LR_val_model.predict(x_train))
-    LR_train_f1 = f1_score(y_train, LR_val_model.predict(x_train))
-    LR_train_score = roc_auc_score(y_train, LR_val_model.predict_proba(x_train)[:,1])
-    LR_val_accuracy = accuracy_score(y_val, LR_val_model.predict(x_val))
-    LR_val_f1 = f1_score(y_val, LR_val_model.predict(x_val))
-    LR_val_score = roc_auc_score(y_val, LR_val_model.predict_proba(x_val)[:,1])
-    print(f"LR Accuracy| Train: {LR_train_accuracy} Val: {LR_val_accuracy}")
-    print(f"LR F1| Train: {LR_train_f1} Val: {LR_val_f1}")
-    print(f"LR ROC AUC| Train: {LR_train_score} Val: {LR_val_score}")
+    LR_val_model = LR_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    LR_train_accuracy = accuracy_score(y_train_processed, LR_val_model.predict(x_train_processed))
+    LR_train_f1 = f1_score(y_train_processed, LR_val_model.predict(x_train_processed))
+    LR_train_ROC = roc_auc_score(y_train_processed, LR_val_model.predict_proba(x_train_processed)[:,1])
+    LR_train_oversampled_accuracy = accuracy_score(y_train_oversampled, LR_val_model.predict(x_train_oversampled))
+    LR_train_oversampled_f1 = f1_score(y_train_oversampled, LR_val_model.predict(x_train_oversampled))
+    LR_train_oversampled_ROC = roc_auc_score(y_train_oversampled, LR_val_model.predict_proba(x_train_oversampled)[:,1])
+    LR_val_accuracy = accuracy_score(y_val_processed, LR_val_model.predict(x_val_processed))
+    LR_val_f1 = f1_score(y_val_processed, LR_val_model.predict(x_val_processed))
+    LR_val_ROC = roc_auc_score(y_val_processed, LR_val_model.predict_proba(x_val_processed)[:,1])
+    print(f"LR Train: Accuracy = {LR_train_accuracy:.4f} | F1 = {LR_train_f1:.4f} | ROC AUC = {LR_train_ROC:.4f}")
+    print(f"LR Oversampled Train: Accuracy = {LR_train_oversampled_accuracy:.4f} | F1 = {LR_train_oversampled_f1:.4f} | ROC AUC = {LR_train_oversampled_ROC:.4f}")
+    print(f"LR Val: Accuracy = {LR_val_accuracy:.4f} | F1 = {LR_val_f1:.4f} | ROC AUC = {LR_val_ROC:.4f}")
 
-    XGB_val_model = XGB_tuned_model_pipeline.fit(x_train, y_train)
+    XGB_val_model = XGB_tuned_model_pipeline.fit(x_train_oversampled_XGB, y_train_oversampled_XGB)
     XGB_train_accuracy = accuracy_score(y_train, XGB_val_model.predict(x_train))
     XGB_train_f1 = f1_score(y_train, XGB_val_model.predict(x_train))
-    XGB_train_score = roc_auc_score(y_train, XGB_val_model.predict_proba(x_train)[:,1])
+    XGB_train_ROC = roc_auc_score(y_train, XGB_val_model.predict_proba(x_train)[:,1])
+    XGB_train_oversampled_accuracy = accuracy_score(y_train_oversampled_XGB, XGB_val_model.predict(x_train_oversampled_XGB))
+    XGB_train_oversampled_f1 = f1_score(y_train_oversampled_XGB, XGB_val_model.predict(x_train_oversampled_XGB))
+    XGB_train_oversampled_ROC = roc_auc_score(y_train_oversampled_XGB, XGB_val_model.predict_proba(x_train_oversampled_XGB)[:,1])
     XGB_val_accuracy = accuracy_score(y_val, XGB_val_model.predict(x_val))
     XGB_val_f1 = f1_score(y_val, XGB_val_model.predict(x_val))
-    XGB_val_score = roc_auc_score(y_val, XGB_val_model.predict_proba(x_val)[:,1])
-    print(f"XGB Accuracy| Train: {XGB_train_accuracy} Val: {XGB_val_accuracy}")
-    print(f"XGB F1| Train: {XGB_train_f1} Val: {XGB_val_f1}")
-    print(f"XGB ROC AUC| Train: {XGB_train_score} Val: {XGB_val_score}")
+    XGB_val_ROC = roc_auc_score(y_val, XGB_val_model.predict_proba(x_val)[:,1])
+    print(f"XGB Train: Accuracy = {XGB_train_accuracy:.4f} | F1 = {XGB_train_f1:.4f} | ROC AUC = {XGB_train_ROC:.4f}")
+    print(f"XGB Oversampled Train: Accuracy = {XGB_train_oversampled_accuracy:.4f} | F1 = {XGB_train_oversampled_f1:.4f} | ROC AUC = {XGB_train_oversampled_ROC:.4f}")
+    print(f"XGB Val: Accuracy = {XGB_val_accuracy:.4f} | F1 = {XGB_val_f1:.4f} | ROC AUC = {XGB_val_ROC:.4f}")
 
-    SVM_val_model = SVM_tuned_model_pipeline.fit(x_train, y_train)
-    SVM_train_accuracy = accuracy_score(y_train, SVM_val_model.predict(x_train))
-    SVM_train_f1 = f1_score(y_train, SVM_val_model.predict(x_train))
-    SVM_train_score = roc_auc_score(y_train, SVM_val_model.decision_function(x_train))
-    SVM_val_accuracy = accuracy_score(y_val, SVM_val_model.predict(x_val))
-    SVM_val_f1 = f1_score(y_val, SVM_val_model.predict(x_val))
-    SVM_val_score = roc_auc_score(y_val, SVM_val_model.decision_function(x_val))
-    print(f"SVM Accuracy| Train: {SVM_train_accuracy} Val: {SVM_val_accuracy}")
-    print(f"SVM F1| Train: {SVM_train_f1} Val: {SVM_val_f1}")
-    print(f"SVM ROC AUC| Train: {SVM_train_score} Val: {SVM_val_score}")
+    SVM_val_model = SVM_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
+    SVM_train_accuracy = accuracy_score(y_train_processed, SVM_val_model.predict(x_train_processed))
+    SVM_train_f1 = f1_score(y_train_processed, SVM_val_model.predict(x_train_processed))
+    SVM_train_ROC = roc_auc_score(y_train_processed, SVM_val_model.decision_function(x_train_processed))
+    SVM_train_oversampled_accuracy = accuracy_score(y_train_oversampled, SVM_val_model.predict(x_train_oversampled))
+    SVM_train_oversampled_f1 = f1_score(y_train_oversampled, SVM_val_model.predict(x_train_oversampled))
+    SVM_train_oversampled_ROC = roc_auc_score(y_train_oversampled, SVM_val_model.decision_function(x_train_oversampled))
+    SVM_val_accuracy = accuracy_score(y_val_processed, SVM_val_model.predict(x_val_processed))
+    SVM_val_f1 = f1_score(y_val_processed, SVM_val_model.predict(x_val_processed))
+    SVM_val_ROC = roc_auc_score(y_val_processed, SVM_val_model.decision_function(x_val_processed))
+    print(f"SVM Train: Accuracy = {SVM_train_accuracy:.4f} | F1 = {SVM_train_f1:.4f} | ROC AUC = {SVM_train_ROC:.4f}")
+    print(f"SVM Oversampled Train: Accuracy = {SVM_train_oversampled_accuracy:.4f} | F1 = {SVM_train_oversampled_f1:.4f} | ROC AUC = {SVM_train_oversampled_ROC:.4f}")
+    print(f"SVM Val: Accuracy = {SVM_val_accuracy:.4f} | F1 = {SVM_val_f1:.4f} | ROC AUC = {SVM_val_ROC:.4f}")
 
 
 #----Model testing----
 plot_ROC = False
 if plot_ROC:
-    LR_test_model = LR_tuned_model_pipeline.fit(x_tval, y_tval)
-    LR_tval_score = roc_auc_score(y_tval, LR_test_model.predict_proba(x_tval)[:,1])
-    LR_test_score = roc_auc_score(y_test, LR_test_model.predict_proba(x_test)[:,1])
+    LR_test_model = LR_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    LR_tval_score = roc_auc_score(y_tval_processed, LR_test_model.predict_proba(x_tval_processed)[:,1])
+    LR_test_score = roc_auc_score(y_test_processed, LR_test_model.predict_proba(x_test_processed)[:,1])
     print("LR finished...")
 
-    XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval, y_tval)
+    XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval_oversampled_XGB, y_tval_oversampled_XGB)
     XGB_tval_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
     XGB_test_score = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
     print("XGB finished...")
 
-    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
-    SVM_tval_score = roc_auc_score(y_tval, SVM_test_model.decision_function(x_tval))
-    SVM_test_score = roc_auc_score(y_test, SVM_test_model.decision_function(x_test))
+    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    SVM_tval_score = roc_auc_score(y_tval_processed, SVM_test_model.decision_function(x_tval_processed))
+    SVM_test_score = roc_auc_score(y_test_processed, SVM_test_model.decision_function(x_test_processed))
     print("SVM finished...")
 
     print(f"LR ROC AUC| Train: {LR_tval_score} Test: {LR_test_score}")
@@ -448,9 +470,9 @@ if plot_ROC:
     print(f"SVM ROC AUC| Train: {SVM_tval_score} Test: {SVM_test_score}")
 
     axes = plt.gca()
-    RocCurveDisplay.from_predictions(y_true=y_test, y_score=LR_test_model.predict_proba(x_test)[:,1], ax=axes, name="Logisstic Regression")
+    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=LR_test_model.predict_proba(x_test_processed)[:,1], ax=axes, name="Logisstic Regression")
     RocCurveDisplay.from_predictions(y_true=y_test, y_score=XGB_test_model.predict_proba(x_test)[:,1], ax=axes, name="XGBoost")
-    RocCurveDisplay.from_predictions(y_true=y_test, y_score=SVM_test_model.decision_function(x_test), ax=axes, name="SVM")
+    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=SVM_test_model.decision_function(x_test_processed), ax=axes, name="SVM")
 
     plt.tight_layout()
     plt.show()
@@ -471,9 +493,9 @@ MI = False
 if MI:
     mutual_info = pd.Series(
         mutual_info_classif(
-            preprocessing_pipeline.fit_transform(x),
-            y,
-            discrete_features=[feature in discrete_features for feature in x.columns]
+            x_processed,
+            y_processed,
+            discrete_features= nominal_features + ordinal_features
         ),index=x.columns).sort_values(ascending=False)
     mutual_info.plot.bar()
     plt.title("Mutual Information Feature Importance")
@@ -484,19 +506,19 @@ if MI:
 #   SHAP
 SHAP = False
 if SHAP:
-    LR_test_model = LR_tuned_model_pipeline.fit(x_tval, y_tval)
-    LR_explainer = shap.Explainer(LR_test_model.predict_proba, x_tval)
-    LR_SHAP_values = LR_explainer(x_test)[:, :, 1]
+    LR_test_model = LR_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    LR_explainer = shap.Explainer(LR_test_model.predict_proba, x_tval_processed)
+    LR_SHAP_values = LR_explainer(x_test_processed)[:, :, 1]
     LR_SHAP_importance = np.abs(LR_SHAP_values.values).mean(axis=0)
 
-    XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval, y_tval)
+    XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval_oversampled_XGB, y_tval_oversampled_XGB)
     XGB_explainer = shap.Explainer(XGB_test_model.predict_proba, x_tval)
     XGB_SHAP_values = XGB_explainer(x_test)[:, :, 1]
     XGB_SHAP_importance = np.abs(XGB_SHAP_values.values).mean(axis=0)
     
-    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval, y_tval)
-    SVM_explainer = shap.Explainer(SVM_test_model.predict_proba, x_tval)
-    SVM_SHAP_values = SVM_explainer(x_test)[:, :, 1]
+    SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    SVM_explainer = shap.Explainer(SVM_test_model.predict_proba, x_tval_processed)
+    SVM_SHAP_values = SVM_explainer(x_test_processed)[:, :, 1]
     SVM_SHAP_importance = np.abs(SVM_SHAP_values.values).mean(axis=0)
 
     # Plot bars by shifting x-positions
@@ -515,10 +537,7 @@ if SHAP:
         
 
 
-#----Week 9 additions----
+#----Improvements----
+#   Data synthesis (SMOTE/tVAE)
 #   model based feature importance analysis
-#   logistic regression model from scratch
-#   plot training and compare to other models
-#   MLP using pytorch (small dataset so won't perform well)
-
-#   SVM (scikit-learn)
+#   tSNE for dataset visualisation
