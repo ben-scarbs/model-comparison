@@ -43,9 +43,7 @@ if missings_feature:
 # ['male', 'age', 'education', 'currentSmoker', 'cigsPerDay', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes', 'totChol', 'sysBP', 'diaBP', 'BMI', 'heartRate', 'glucose', 'TenYearCHD']
 # contains missing: ['education', 'cigsPerDay', 'BPMeds', 'totChol', 'BMI', 'heartRate','glucose']
 nominal_features = ["male", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"]
-nominal_features_mask = np.isin(x.columns, nominal_features)    # positional mask of nominal features
-nominal_features_mask = np.insert(arr=nominal_features_mask, obj=np.arange(nominal_features_mask.size)[nominal_features_mask], values=True)
-print(nominal_features_mask.shape)
+nominal_features_idx = [x.columns.get_loc(col) for col in nominal_features]
 ordinal_features = ["age", "education", "cigsPerDay"]
 continuous_features = ["totChol", "sysBP", "diaBP", "BMI", "heartRate", "glucose"]
 
@@ -68,8 +66,7 @@ class_imbalance_weight = (y_train == 0).sum() / (y_train == 1).sum()    # XGBoos
 
 #----Data Preprocessing----
 nominal_pipeline = Pipeline([
-    ("impute", SimpleImputer(strategy="most_frequent")),
-    ("onehot", OneHotEncoder(handle_unknown="ignore"))
+    ("impute", SimpleImputer(strategy="most_frequent"))
 ])
 
 ordinal_continuous_pipeline = Pipeline([
@@ -77,16 +74,12 @@ ordinal_continuous_pipeline = Pipeline([
     ("scale", StandardScaler())
 ])
 
-scale_impute_pipeline = ColumnTransformer(
+preprocessing_pipeline = ColumnTransformer(
     transformers=[
         ("nominal", nominal_pipeline, nominal_features),
         ("ordinal_continuous", ordinal_continuous_pipeline, ordinal_features+continuous_features),
     ]
 )
-
-preprocessing_pipeline = imb_Pipeline(steps=[
-    ("scale_impute", scale_impute_pipeline)
-])
 
 preprocessing_pipeline.fit(x_train, y_train)
 x_processed = preprocessing_pipeline.transform(x)
@@ -107,13 +100,6 @@ XGB_impute = ColumnTransformer(
     ]
 )
 
-XGB_preprocessing = imb_Pipeline(steps=[
-    ("impute", XGB_impute)
-])
-
-x_train_processed_XGB = XGB_preprocessing.fit_transform(x_train)
-x_tval_processed_XGB = XGB_preprocessing.transform(x_train)
-
 # Data Modes:
 data_mode = "smo"
 #   - "raw" = No augmentation/synthesis
@@ -128,28 +114,37 @@ if data_mode == "raw":
 
 elif data_mode == "smo":
     #--SMOTE data synthesis--
-    smote = SMOTENC(categorical_features= nominal_features_mask)
-    preprocessing_pipeline.steps.append(("synthesis", smote))
+    smote = SMOTENC(categorical_features= nominal_features_idx, sampling_strategy="minority")
 
-    x_train_oversampled, y_train_oversampled = preprocessing_pipeline.fit_resample(x_train, y_train)
-    x_tval_oversampled, y_tval_oversampled = preprocessing_pipeline.fit_resample(x_tval, y_tval)
+    x_train_oversampled, y_train_oversampled = smote.fit_resample(x_train_processed, y_train)
+    x_tval_oversampled, y_tval_oversampled = smote.fit_resample(x_tval_processed, y_tval)
 
-    XGB_preprocessing.steps.append(("synthesis", smote))
+    x_train_imp_XGB = XGB_impute.fit_transform(x_train, y_train)
+    x_train_imp_oversampled_XGB, y_train_imp_oversampled_XGB = smote.fit_resample(x_train_imp_XGB, y_train)
+    x_tval_imp_XGB = XGB_impute.fit_transform(x_tval, y_tval)
+    x_tval_imp_oversampled_XGB, y_tval_imp_oversampled_XGB = smote.fit_resample(x_tval_imp_XGB, y_tval)
 
-    x_train_imp_oversampled_XGB, y_train_imp_oversampled_XGB = XGB_preprocessing.fit_resample(x_train, y_train)
-    x_tval_imp_oversampled_XGB, y_tval_imp_oversampled_XGB = XGB_preprocessing.fit_resample(x_tval, y_tval)
+    XGB_x_train_synthetic = pd.DataFrame(
+        x_train_imp_oversampled_XGB[len(x_train):],
+        columns=x_train.columns
+    )
+    XGB_y_train_synthetic = pd.Series(
+        y_train_imp_oversampled_XGB[len(y_train):],
+        name=y_train.name
+    )
+    x_train_oversampled_XGB = pd.concat([x_train, XGB_x_train_synthetic], ignore_index=True)
+    y_train_oversampled_XGB = pd.concat([y_train, XGB_y_train_synthetic], ignore_index=True)
 
-    XGB_train_synthetic_mask = x_train_imp_oversampled_XGB.isin(x_train_processed_XGB)
-    XGB_x_train_synthetic = x_train_imp_oversampled_XGB[~XGB_train_synthetic_mask]
-    XGB_y_train_synthetic = y_train_imp_oversampled_XGB[~XGB_train_synthetic_mask]
-    x_train_oversampled_XGB = pd.concat([x_train, XGB_x_train_synthetic])
-    y_train_oversampled_XGB = pd.concat([y_train, XGB_y_train_synthetic])
-
-    XGB_tval_synthetic_mask = x_tval_imp_oversampled_XGB.isin(x_tval_processed_XGB)
-    XGB_x_tval_synthetic = x_tval_imp_oversampled_XGB[~XGB_tval_synthetic_mask]
-    XGB_y_tval_synthetic = y_tval_imp_oversampled_XGB[~XGB_tval_synthetic_mask]
-    x_tval_oversampled_XGB = pd.concat([x_train, XGB_x_tval_synthetic])
-    y_tval_oversampled_XGB = pd.concat([y_train, XGB_y_tval_synthetic])
+    XGB_x_tval_synthetic = pd.DataFrame(
+        x_tval_imp_oversampled_XGB[len(x_tval):],
+        columns=x_tval.columns
+    )
+    XGB_y_tval_synthetic = pd.Series(
+        y_tval_imp_oversampled_XGB[len(y_tval):],
+        name=y_tval.name
+    )
+    x_tval_oversampled_XGB = pd.concat([x_tval, XGB_x_tval_synthetic], ignore_index=True)
+    y_tval_oversampled_XGB = pd.concat([y_tval, XGB_y_tval_synthetic], ignore_index=True)
 
 
 #----Logisitc Regression----
