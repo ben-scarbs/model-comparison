@@ -15,7 +15,7 @@ from xgboost import XGBClassifier
 from sklearn.svm import SVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, RocCurveDisplay
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, roc_auc_score, RocCurveDisplay
 from sklearn.feature_selection import mutual_info_classif
 import shap
 
@@ -430,77 +430,127 @@ if SVM_hp_tuning:
     print(SVM_search.best_params_)
 
 #----Model evaluation----
-model_eval = True
+model_eval = False
 if model_eval:
     LR_val_model = LR_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
     LR_train_accuracy = accuracy_score(y_train_processed, LR_val_model.predict(x_train_processed))
+    LR_train_balanced_accuracy = balanced_accuracy_score(y_train_processed, LR_val_model.predict(x_train_processed))
     LR_train_f1 = f1_score(y_train_processed, LR_val_model.predict(x_train_processed))
     LR_train_ROC = roc_auc_score(y_train_processed, LR_val_model.predict_proba(x_train_processed)[:,1])
     LR_train_oversampled_accuracy = accuracy_score(y_train_oversampled, LR_val_model.predict(x_train_oversampled))
+    LR_train_oversampled_balanced_accuracy = balanced_accuracy_score(y_train_oversampled, LR_val_model.predict(x_train_oversampled))
     LR_train_oversampled_f1 = f1_score(y_train_oversampled, LR_val_model.predict(x_train_oversampled))
     LR_train_oversampled_ROC = roc_auc_score(y_train_oversampled, LR_val_model.predict_proba(x_train_oversampled)[:,1])
     LR_val_accuracy = accuracy_score(y_val_processed, LR_val_model.predict(x_val_processed))
+    LR_val_balanced_accuracy = balanced_accuracy_score(y_val_processed, LR_val_model.predict(x_val_processed))
     LR_val_f1 = f1_score(y_val_processed, LR_val_model.predict(x_val_processed))
     LR_val_ROC = roc_auc_score(y_val_processed, LR_val_model.predict_proba(x_val_processed)[:,1])
-    print(f"LR Train: Accuracy = {LR_train_accuracy:.4f} | F1 = {LR_train_f1:.4f} | ROC AUC = {LR_train_ROC:.4f}")
-    print(f"LR Oversampled Train: Accuracy = {LR_train_oversampled_accuracy:.4f} | F1 = {LR_train_oversampled_f1:.4f} | ROC AUC = {LR_train_oversampled_ROC:.4f}")
-    print(f"LR Val: Accuracy = {LR_val_accuracy:.4f} | F1 = {LR_val_f1:.4f} | ROC AUC = {LR_val_ROC:.4f}")
+    print(f"LR Train: Accuracy = {LR_train_accuracy:.4f} | Balanced = {LR_train_balanced_accuracy:.4f} | F1 = {LR_train_f1:.4f} | ROC AUC = {LR_train_ROC:.4f}")
+    print(f"LR Oversampled Train: Accuracy = {LR_train_oversampled_accuracy:.4f} | Balanced = {LR_train_oversampled_balanced_accuracy:.4f} | F1 = {LR_train_oversampled_f1:.4f} | ROC AUC = {LR_train_oversampled_ROC:.4f}")
+    print(f"LR Val: Accuracy = {LR_val_accuracy:.4f} | Balanced = {LR_val_balanced_accuracy:.4f} | F1 = {LR_val_f1:.4f} | ROC AUC = {LR_val_ROC:.4f}")
 
     XGB_val_model = XGB_tuned_model_pipeline.fit(x_train_oversampled_XGB, y_train_oversampled_XGB)
     XGB_train_accuracy = accuracy_score(y_train, XGB_val_model.predict(x_train))
+    XGB_train_balanced_accuracy = balanced_accuracy_score(y_train, XGB_val_model.predict(x_train))
     XGB_train_f1 = f1_score(y_train, XGB_val_model.predict(x_train))
     XGB_train_ROC = roc_auc_score(y_train, XGB_val_model.predict_proba(x_train)[:,1])
     XGB_train_oversampled_accuracy = accuracy_score(y_train_oversampled_XGB, XGB_val_model.predict(x_train_oversampled_XGB))
+    XGB_train_oversampled_balanced_accuracy = balanced_accuracy_score(y_train_oversampled_XGB, XGB_val_model.predict(x_train_oversampled_XGB))
     XGB_train_oversampled_f1 = f1_score(y_train_oversampled_XGB, XGB_val_model.predict(x_train_oversampled_XGB))
     XGB_train_oversampled_ROC = roc_auc_score(y_train_oversampled_XGB, XGB_val_model.predict_proba(x_train_oversampled_XGB)[:,1])
     XGB_val_accuracy = accuracy_score(y_val, XGB_val_model.predict(x_val))
+    XGB_val_balanced_accuracy = balanced_accuracy_score(y_val, XGB_val_model.predict(x_val))
     XGB_val_f1 = f1_score(y_val, XGB_val_model.predict(x_val))
     XGB_val_ROC = roc_auc_score(y_val, XGB_val_model.predict_proba(x_val)[:,1])
-    print(f"XGB Train: Accuracy = {XGB_train_accuracy:.4f} | F1 = {XGB_train_f1:.4f} | ROC AUC = {XGB_train_ROC:.4f}")
-    print(f"XGB Oversampled Train: Accuracy = {XGB_train_oversampled_accuracy:.4f} | F1 = {XGB_train_oversampled_f1:.4f} | ROC AUC = {XGB_train_oversampled_ROC:.4f}")
-    print(f"XGB Val: Accuracy = {XGB_val_accuracy:.4f} | F1 = {XGB_val_f1:.4f} | ROC AUC = {XGB_val_ROC:.4f}")
+    print(f"XGB Train: Accuracy = {XGB_train_accuracy:.4f} | Balanced = {XGB_train_balanced_accuracy:.4f} | F1 = {XGB_train_f1:.4f} | ROC AUC = {XGB_train_ROC:.4f}")
+    print(f"XGB Oversampled Train: Accuracy = {XGB_train_oversampled_accuracy:.4f} | Balanced = {XGB_train_oversampled_balanced_accuracy:.4f} | F1 = {XGB_train_oversampled_f1:.4f} | ROC AUC = {XGB_train_oversampled_ROC:.4f}")
+    print(f"XGB Val: Accuracy = {XGB_val_accuracy:.4f} | Balanced = {XGB_val_balanced_accuracy:.4f} | F1 = {XGB_val_f1:.4f} | ROC AUC = {XGB_val_ROC:.4f}")
 
     SVM_val_model = SVM_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
     SVM_train_accuracy = accuracy_score(y_train_processed, SVM_val_model.predict(x_train_processed))
+    SVM_train_balanced_accuracy = balanced_accuracy_score(y_train_processed, SVM_val_model.predict(x_train_processed))
     SVM_train_f1 = f1_score(y_train_processed, SVM_val_model.predict(x_train_processed))
     SVM_train_ROC = roc_auc_score(y_train_processed, SVM_val_model.decision_function(x_train_processed))
     SVM_train_oversampled_accuracy = accuracy_score(y_train_oversampled, SVM_val_model.predict(x_train_oversampled))
+    SVM_train_oversampled_balanced_accuracy = balanced_accuracy_score(y_train_oversampled, SVM_val_model.predict(x_train_oversampled))
     SVM_train_oversampled_f1 = f1_score(y_train_oversampled, SVM_val_model.predict(x_train_oversampled))
     SVM_train_oversampled_ROC = roc_auc_score(y_train_oversampled, SVM_val_model.decision_function(x_train_oversampled))
     SVM_val_accuracy = accuracy_score(y_val_processed, SVM_val_model.predict(x_val_processed))
+    SVM_val_balanced_accuracy = balanced_accuracy_score(y_val_processed, SVM_val_model.predict(x_val_processed))
     SVM_val_f1 = f1_score(y_val_processed, SVM_val_model.predict(x_val_processed))
     SVM_val_ROC = roc_auc_score(y_val_processed, SVM_val_model.decision_function(x_val_processed))
-    print(f"SVM Train: Accuracy = {SVM_train_accuracy:.4f} | F1 = {SVM_train_f1:.4f} | ROC AUC = {SVM_train_ROC:.4f}")
-    print(f"SVM Oversampled Train: Accuracy = {SVM_train_oversampled_accuracy:.4f} | F1 = {SVM_train_oversampled_f1:.4f} | ROC AUC = {SVM_train_oversampled_ROC:.4f}")
-    print(f"SVM Val: Accuracy = {SVM_val_accuracy:.4f} | F1 = {SVM_val_f1:.4f} | ROC AUC = {SVM_val_ROC:.4f}")
+    print(f"SVM Train: Accuracy = {SVM_train_accuracy:.4f} | Balanced = {SVM_train_balanced_accuracy:.4f} | F1 = {SVM_train_f1:.4f} | ROC AUC = {SVM_train_ROC:.4f}")
+    print(f"SVM Oversampled Train: Accuracy = {SVM_train_oversampled_accuracy:.4f} | Balanced = {SVM_train_oversampled_balanced_accuracy:.4f} | F1 = {SVM_train_oversampled_f1:.4f} | ROC AUC = {SVM_train_oversampled_ROC:.4f}")
+    print(f"SVM Val: Accuracy = {SVM_val_accuracy:.4f} | Balanced = {SVM_val_balanced_accuracy:.4f} | F1 = {SVM_val_f1:.4f} | ROC AUC = {SVM_val_ROC:.4f}")
 
 
-#----Model testing----
-plot_ROC = False
-if plot_ROC:
+#----Model Testing----
+model_test = False
+if model_test:
     LR_test_model = LR_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
-    LR_tval_score = roc_auc_score(y_tval_processed, LR_test_model.predict_proba(x_tval_processed)[:,1])
-    LR_test_score = roc_auc_score(y_test_processed, LR_test_model.predict_proba(x_test_processed)[:,1])
-    print("LR finished...")
+    LR_tval_accuracy = accuracy_score(y_tval_processed, LR_test_model.predict(x_tval_processed))
+    LR_tval_balanced_accuracy = balanced_accuracy_score(y_tval_processed, LR_test_model.predict(x_tval_processed))
+    LR_tval_f1 = f1_score(y_tval_processed, LR_test_model.predict(x_tval_processed))
+    LR_tval_ROC = roc_auc_score(y_tval_processed, LR_test_model.predict_proba(x_tval_processed)[:,1])
+    LR_tval_oversampled_accuracy = accuracy_score(y_tval_oversampled, LR_test_model.predict(x_tval_oversampled))
+    LR_tval_oversampled_balanced_accuracy = balanced_accuracy_score(y_tval_oversampled, LR_test_model.predict(x_tval_oversampled))
+    LR_tval_oversampled_f1 = f1_score(y_tval_oversampled, LR_test_model.predict(x_tval_oversampled))
+    LR_tval_oversampled_ROC = roc_auc_score(y_tval_oversampled, LR_test_model.predict_proba(x_tval_oversampled)[:,1])
+    LR_test_accuracy = accuracy_score(y_test_processed, LR_test_model.predict(x_test_processed))
+    LR_test_balanced_accuracy = balanced_accuracy_score(y_test_processed, LR_test_model.predict(x_test_processed))
+    LR_test_f1 = f1_score(y_test_processed, LR_test_model.predict(x_test_processed))
+    LR_test_ROC = roc_auc_score(y_test_processed, LR_test_model.predict_proba(x_test_processed)[:,1])
+    print(f"LR Tval: Accuracy = {LR_tval_accuracy:.4f} | Balanced = {LR_tval_balanced_accuracy:.4f} | F1 = {LR_tval_f1:.4f} | ROC AUC = {LR_tval_ROC:.4f}")
+    print(f"LR Oversampled Tval: Accuracy = {LR_tval_oversampled_accuracy:.4f} | Balanced = {LR_tval_oversampled_balanced_accuracy:.4f} | F1 = {LR_tval_oversampled_f1:.4f} | ROC AUC = {LR_tval_oversampled_ROC:.4f}")
+    print(f"LR Test: Accuracy = {LR_test_accuracy:.4f} | Balanced = {LR_test_balanced_accuracy:.4f} | F1 = {LR_test_f1:.4f} | ROC AUC = {LR_test_ROC:.4f}")
 
     XGB_test_model = XGB_tuned_model_pipeline.fit(x_tval_oversampled_XGB, y_tval_oversampled_XGB)
-    XGB_tval_score = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
-    XGB_test_score = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
-    print("XGB finished...")
+    XGB_tval_accuracy = accuracy_score(y_tval, XGB_test_model.predict(x_tval))
+    XGB_tval_balanced_accuracy = balanced_accuracy_score(y_tval, XGB_test_model.predict(x_tval))
+    XGB_tval_f1 = f1_score(y_tval, XGB_test_model.predict(x_tval))
+    XGB_tval_ROC = roc_auc_score(y_tval, XGB_test_model.predict_proba(x_tval)[:,1])
+    XGB_tval_oversampled_accuracy = accuracy_score(y_tval_oversampled_XGB, XGB_test_model.predict(x_tval_oversampled_XGB))
+    XGB_tval_oversampled_balanced_accuracy = balanced_accuracy_score(y_tval_oversampled_XGB, XGB_test_model.predict(x_tval_oversampled_XGB))
+    XGB_tval_oversampled_f1 = f1_score(y_tval_oversampled_XGB, XGB_test_model.predict(x_tval_oversampled_XGB))
+    XGB_tval_oversampled_ROC = roc_auc_score(y_tval_oversampled_XGB, XGB_test_model.predict_proba(x_tval_oversampled_XGB)[:,1])
+    XGB_test_accuracy = accuracy_score(y_test, XGB_test_model.predict(x_test))
+    XGB_test_balanced_accuracy = balanced_accuracy_score(y_test, XGB_test_model.predict(x_test))
+    XGB_test_f1 = f1_score(y_test, XGB_test_model.predict(x_test))
+    XGB_test_ROC = roc_auc_score(y_test, XGB_test_model.predict_proba(x_test)[:,1])
+    print(f"XGB Tval: Accuracy = {XGB_tval_accuracy:.4f} | Balanced = {XGB_tval_balanced_accuracy:.4f} | F1 = {XGB_tval_f1:.4f} | ROC AUC = {XGB_tval_ROC:.4f}")
+    print(f"XGB Oversampled Tval: Accuracy = {XGB_tval_oversampled_accuracy:.4f} | Balanced = {XGB_tval_oversampled_balanced_accuracy:.4f} | F1 = {XGB_tval_oversampled_f1:.4f} | ROC AUC = {XGB_tval_oversampled_ROC:.4f}")
+    print(f"XGB Test: Accuracy = {XGB_test_accuracy:.4f} | Balanced = {XGB_test_balanced_accuracy:.4f} | F1 = {XGB_test_f1:.4f} | ROC AUC = {XGB_test_ROC:.4f}")
 
     SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
-    SVM_tval_score = roc_auc_score(y_tval_processed, SVM_test_model.decision_function(x_tval_processed))
-    SVM_test_score = roc_auc_score(y_test_processed, SVM_test_model.decision_function(x_test_processed))
-    print("SVM finished...")
+    SVM_tval_accuracy = accuracy_score(y_tval_processed, SVM_test_model.predict(x_tval_processed))
+    SVM_tval_balanced_accuracy = balanced_accuracy_score(y_tval_processed, SVM_test_model.predict(x_tval_processed))
+    SVM_tval_f1 = f1_score(y_tval_processed, SVM_test_model.predict(x_tval_processed))
+    SVM_tval_ROC = roc_auc_score(y_tval_processed, SVM_test_model.decision_function(x_tval_processed))
+    SVM_tval_oversampled_accuracy = accuracy_score(y_tval_oversampled, SVM_test_model.predict(x_tval_oversampled))
+    SVM_tval_oversampled_balanced_accuracy = balanced_accuracy_score(y_tval_oversampled, SVM_test_model.predict(x_tval_oversampled))
+    SVM_tval_oversampled_f1 = f1_score(y_tval_oversampled, SVM_test_model.predict(x_tval_oversampled))
+    SVM_tval_oversampled_ROC = roc_auc_score(y_tval_oversampled, SVM_test_model.decision_function(x_tval_oversampled))
+    SVM_test_accuracy = accuracy_score(y_test_processed, SVM_test_model.predict(x_test_processed))
+    SVM_test_balanced_accuracy = balanced_accuracy_score(y_test_processed, SVM_test_model.predict(x_test_processed))
+    SVM_test_f1 = f1_score(y_test_processed, SVM_test_model.predict(x_test_processed))
+    SVM_test_ROC = roc_auc_score(y_test_processed, SVM_test_model.decision_function(x_test_processed))
+    print(f"SVM Tval: Accuracy = {SVM_tval_accuracy:.4f} | Balanced = {SVM_tval_balanced_accuracy:.4f} | F1 = {SVM_tval_f1:.4f} | ROC AUC = {SVM_tval_ROC:.4f}")
+    print(f"SVM Oversampled Tval: Accuracy = {SVM_tval_oversampled_accuracy:.4f} | Balanced = {SVM_tval_oversampled_balanced_accuracy:.4f} | F1 = {SVM_tval_oversampled_f1:.4f} | ROC AUC = {SVM_tval_oversampled_ROC:.4f}")
+    print(f"SVM Test: Accuracy = {SVM_test_accuracy:.4f} | Balanced = {SVM_test_balanced_accuracy:.4f} | F1 = {SVM_test_f1:.4f} | ROC AUC = {SVM_test_ROC:.4f}")
 
-    print(f"LR ROC AUC| Train: {LR_tval_score} Test: {LR_test_score}")
-    print(f"XGB ROC AUC| Train: {XGB_tval_score} Test: {XGB_test_score}")
-    print(f"SVM ROC AUC| Train: {SVM_tval_score} Test: {SVM_test_score}")
 
+
+#----ROC AUC curves----
+plot_ROC = False
+if plot_ROC:
+    LR_plot_ROC_model = LR_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    XGB_plot_ROC_model = XGB_tuned_model_pipeline.fit(x_tval_oversampled_XGB, y_tval_oversampled_XGB)
+    SVM_plot_ROC_model = SVM_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
+    
     axes = plt.gca()
-    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=LR_test_model.predict_proba(x_test_processed)[:,1], ax=axes, name="Logisstic Regression")
-    RocCurveDisplay.from_predictions(y_true=y_test, y_score=XGB_test_model.predict_proba(x_test)[:,1], ax=axes, name="XGBoost")
-    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=SVM_test_model.decision_function(x_test_processed), ax=axes, name="SVM")
+    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=LR_plot_ROC_model.predict_proba(x_test_processed)[:,1], ax=axes, name="Logisstic Regression")
+    RocCurveDisplay.from_predictions(y_true=y_test, y_score=XGB_plot_ROC_model.predict_proba(x_test)[:,1], ax=axes, name="XGBoost")
+    RocCurveDisplay.from_predictions(y_true=y_test_processed, y_score=SVM_plot_ROC_model.decision_function(x_test_processed), ax=axes, name="SVM")
 
     plt.tight_layout()
     plt.show()
