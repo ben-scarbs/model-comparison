@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from imblearn.over_sampling import SMOTENC
 from imblearn.pipeline import Pipeline as imb_Pipeline
+from sdv.single_table import GaussianCopulaSynthesizer
+from sdv.metadata import SingleTableMetadata
+from sdv.sampling import Condition
 from sklearn.model_selection import train_test_split, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
@@ -146,6 +149,41 @@ elif data_mode == "smo":
     )
     x_tval_oversampled_XGB = pd.concat([x_tval, XGB_x_tval_synthetic], ignore_index=True)
     y_tval_oversampled_XGB = pd.concat([y_tval, XGB_y_tval_synthetic], ignore_index=True)
+
+elif data_mode == "syn":
+    #--Gaussian Copulas data synthesis (SDV)--
+    xy_train = pd.concat([x_train, y_train], axis=1)
+    metadata = SingleTableMetadata()
+    metadata.detect_from_dataframe(data=xy_train)
+    gaussian_copula = GaussianCopulaSynthesizer(
+        metadata,
+        enforce_min_max_values=True,
+        enforce_rounding=True,
+        default_distribution='beta'
+    )
+    gaussian_copula.fit(xy_train)
+
+    k_train_synthetic = np.abs((y_train == 0).sum() - (y_train == 1).sum())
+    train_condition = Condition(num_rows=k_train_synthetic, column_values={"TenYearCHD": 1})
+    train_synthetic = gaussian_copula.sample_from_conditions(conditions=[train_condition])
+    x_train_synthetic = train_synthetic.drop(columns="TenYearCHD")
+    y_train_synthetic = train_synthetic["TenYearCHD"]
+
+    x_train_oversampled_XGB = pd.concat([x_train, x_train_synthetic])
+    y_train_oversampled_XGB = pd.concat([y_train, y_train_synthetic])
+    x_train_oversampled = preprocessing_pipeline.fit_transform(x_train_oversampled_XGB)
+    y_train_oversampled = y_train_oversampled_XGB
+
+    k_tval_synthetic = np.abs((y_tval == 0).sum() - (y_tval == 1).sum())
+    tval_condition = Condition(num_rows=k_tval_synthetic, column_values={"TenYearCHD": 1})
+    tval_synthetic = gaussian_copula.sample_from_conditions(conditions=[tval_condition])
+    x_tval_synthetic = tval_synthetic.drop(columns="TenYearCHD")
+    y_tval_synthetic = tval_synthetic["TenYearCHD"]
+
+    x_tval_oversampled_XGB = pd.concat([x_tval, x_tval_synthetic])
+    y_tval_oversampled_XGB = pd.concat([y_tval, y_tval_synthetic])
+    x_tval_oversampled = preprocessing_pipeline.fit_transform(x_tval_oversampled_XGB)
+    y_tval_oversampled = y_tval_oversampled_XGB
 
 
 #----Logisitc Regression----
@@ -568,7 +606,7 @@ if plot_ROC:
 #   - XGBoost Feature Gain (week 9)
 
 #----Mutual Information----
-MI = True
+MI = False
 if MI:
     MI_preprocessing = ColumnTransformer(
         transformers=[
