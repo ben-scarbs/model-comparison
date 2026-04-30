@@ -632,9 +632,10 @@ if plot_tSNE:
     plot_settings = [
         ("Original", tsne_x_train_processed, y_train_processed),
         ("Oversampled", tsne_x_train_oversampled, y_train_oversampled),
+        ("Synthetic Only", tsne_x_train_oversampled[len(y_train_processed):], y_train_oversampled[len(y_train_processed):])
     ]
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(18,5))
     for ax, (title, embedding, labels) in zip(axes, plot_settings):
         labels = np.asarray(labels)
         for class_value in class_labels:
@@ -658,6 +659,6 @@ if plot_tSNE:
 
 
 #----Improvements----
+#   Use tSNE to show the syntheic samples in each class
 #   Data synthesis (SMOTE/tVAE)
 #   model based feature importance analysis
-#   tSNE for dataset visualisation
