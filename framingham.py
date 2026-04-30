@@ -659,6 +659,5 @@ if plot_tSNE:
 
 
 #----Improvements----
-#   Use tSNE to show the syntheic samples in each class
 #   Data synthesis (SMOTE/tVAE)
 #   model based feature importance analysis
