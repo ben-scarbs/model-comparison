@@ -567,13 +567,13 @@ if plot_ROC:
 #   - Logistic Regression coefficients/weights (week 9)
 #   - XGBoost Feature Gain (week 9)
 
-#   Mutual Information
-MI = False
+#----Mutual Information----
+MI = True
 if MI:
     MI_preprocessing = ColumnTransformer(
         transformers=[
-            ("ordinal", IterativeImputer(max_iter=5, initial_strategy="median", random_state=0)),
-            ("ordinal", SimpleImputer(strategy="most-frequent"))
+            ("ordinal", IterativeImputer(max_iter=5, initial_strategy="median", random_state=0), ordinal_features+continuous_features),
+            ("nominal", SimpleImputer(strategy="most_frequent"), nominal_features)
         ]
     )
     mutual_info = pd.Series(
@@ -621,7 +621,7 @@ if SHAP:
     plt.show()
 
 #----tSNE Visualisation----
-plot_tSNE = True
+plot_tSNE = False
 if plot_tSNE:
     tsne = TSNE(n_jobs=-1, random_state=0)
     tsne_x_train_processed = tsne.fit_transform(x_train_processed)
