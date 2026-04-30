@@ -18,6 +18,7 @@ from skopt.space import Real, Integer, Categorical
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, roc_auc_score, RocCurveDisplay
 from sklearn.feature_selection import mutual_info_classif
 import shap
+from sklearn.manifold import TSNE
 
 
 file = Path(__file__).with_name("framingham.csv")
@@ -618,7 +619,42 @@ if SHAP:
     ax.legend()
     plt.tight_layout()
     plt.show()
-        
+
+#----tSNE Visualisation----
+plot_tSNE = True
+if plot_tSNE:
+    tsne = TSNE(n_jobs=-1, random_state=0)
+    tsne_x_train_processed = tsne.fit_transform(x_train_processed)
+    tsne_x_train_oversampled = tsne.fit_transform(x_train_oversampled)
+
+    class_colours = {0: "red", 1: "blue"}
+    class_labels = {0: "No CHD", 1: "CHD"}
+    plot_settings = [
+        ("Original", tsne_x_train_processed, y_train_processed),
+        ("Oversampled", tsne_x_train_oversampled, y_train_oversampled),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for ax, (title, embedding, labels) in zip(axes, plot_settings):
+        labels = np.asarray(labels)
+        for class_value in class_labels:
+            class_mask = labels == class_value
+            ax.scatter(
+                embedding[class_mask, 0],
+                embedding[class_mask, 1],
+                c=class_colours[class_value],
+                label=class_labels[class_value],
+                s=15,
+                alpha=0.7
+            )
+        ax.set_title(title)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.legend()
+
+    plt.suptitle("tSNE Plots", fontsize=16)
+    plt.tight_layout()
+    plt.show()
 
 
 #----Improvements----
