@@ -2,12 +2,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from scipy.stats import uniform, randint, loguniform
 from imblearn.over_sampling import SMOTENC
 from imblearn.pipeline import Pipeline as imb_Pipeline
 from sdv.single_table import GaussianCopulaSynthesizer
 from sdv.metadata import SingleTableMetadata
 from sdv.sampling import Condition
-from sklearn.model_selection import train_test_split, StratifiedKFold
+from sklearn.model_selection import train_test_split, StratifiedKFold, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, OneHotEncoder
@@ -197,15 +198,15 @@ LR_params = {
     },
     #LR Val:...
     "smo": {
-        "C": 1,
-        "l1_ratio": 0.0,
-        "class_weight": None
+        "C": 0.04497912998619529,
+        "l1_ratio": 0.06363016933620981,
+        "class_weight": "balanced"
     },
     #LR Val:...
     "syn": {
-        "C": 1,
-        "l1_ratio": 0.0,
-        "class_weight": None
+        "C": 0.04497912998619529,
+        "l1_ratio": 0.06363016933620981,
+        "class_weight": "balanced"
     }
 }
 
@@ -231,25 +232,25 @@ LR_tuned_model_pipeline = Pipeline([
 
 # Hyperparameter Tuning
 # LR_hp_tuning = True to run hyperparameter tuning
-LR_hp_tuning = False
+LR_hp_tuning = True
 
 if LR_hp_tuning:
     # Logistic Regression Tuning
     LR_param_space = {
-        "model__C": Real(1e-4, 1, prior="log-uniform"),
-        "model__l1_ratio": Real(0, 1),
-        "model__class_weight": Categorical([None, "balanced"])
+        "model__C": loguniform(1e-5, 1e5),
+        "model__l1_ratio": uniform(0, 1),
+        "model__class_weight": [None, "balanced"]
     }
 
-    LR_search = BayesSearchCV(
+    LR_search = RandomizedSearchCV(
         estimator=LR_tuned_model_pipeline,
-        search_spaces=LR_param_space,
-        n_iter=150,
+        param_distributions=LR_param_space,
+        n_iter=1000,
         scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
-        verbose=1,
+        verbose=0,
         refit=True
     )
 
@@ -301,7 +302,7 @@ XGB_params = {
         "gamma": 1.0,
         "reg_alpha": 0.0,
         "reg_lambda": 0.0,
-        "scale_pos_weight": None
+        "scale_pos_weight": class_imbalance_weight
     },
     #XGb Val:...
     "syn": {
@@ -314,7 +315,7 @@ XGB_params = {
         "gamma": 1.0,
         "reg_alpha": 0.0,
         "reg_lambda": 0.0,
-        "scale_pos_weight": None
+        "scale_pos_weight": class_imbalance_weight
     }
 }
 
@@ -345,32 +346,32 @@ XGB_tuned_model_pipeline = Pipeline(steps=[
 
 # Hyperparameter Tuning
 # XGB_hp_tuning = True to run hyperparameter tuning
-XGB_hp_tuning = False
+XGB_hp_tuning = True
 
 if XGB_hp_tuning:
     # XGBoost Tuning
     XGB_param_space = {
-        "model__n_estimators": Integer(300, 600),
-        "model__learning_rate": Real(0.005, 0.1, prior="log-uniform"),
-        "model__max_depth": Integer(2, 6),
-        "model__min_child_weight": Integer(2, 6),
-        "model__subsample": Real(0.6, 1.0),
-        "model__colsample_bytree": Real(0.6, 1.0),
-        "model__gamma": Real(0.0, 1.0),
-        "model__reg_alpha": Real(0.0, 1.0),
-        "model__reg_lambda": Real(0.0, 5.0),
-        "model__scale_pos_weight": Real(1.0, class_imbalance_weight)
+        "model__n_estimators": randint(300, 600),
+        "model__learning_rate": loguniform(5e-3, 0.1),
+        "model__max_depth": randint(2, 6),
+        "model__min_child_weight": randint(2, 6),
+        "model__subsample": uniform(0.6, 1.0),
+        "model__colsample_bytree": uniform(0.6, 1.0),
+        "model__gamma": uniform(0.0, 1.0),
+        "model__reg_alpha": uniform(0.0, 1.0),
+        "model__reg_lambda": uniform(0.0, 5.0),
+        "model__scale_pos_weight": [None, class_imbalance_weight]
     }
 
-    XGB_search = BayesSearchCV(
+    XGB_search = RandomizedSearchCV(
         estimator=XGB_tuned_model_pipeline,
-        search_spaces=XGB_param_space,
-        n_iter=200,
+        param_distributions=XGB_param_space,
+        n_iter=1000,
         scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
-        verbose=1,
+        verbose=0,
         refit=True
     )
 
@@ -430,25 +431,25 @@ SVM_tuned_model_pipeline = Pipeline([
 
 # Hyperparameter Tuning
 # SVM_hp_tuning = True to run hyperparameter tuning
-SVM_hp_tuning = False
+SVM_hp_tuning = True
 
 if SVM_hp_tuning:
     # SVM Hyperparameter Tuning
     SVM_param_space = {
-        "model__C": Real(1, 1e9, prior="log-uniform"),
-        "model__gamma": Real(1e-9, 1, prior="log-uniform"),
-        "model__class_weight": Categorical([None, "balanced"])
+        "model__C": loguniform(1e-9, 1e9),
+        "model__gamma": loguniform(1e-9, 1e9),
+        "model__class_weight": [None, "balanced"]
     }
 
-    SVM_search = BayesSearchCV(
+    SVM_search = RandomizedSearchCV(
         estimator=SVM_tuned_model_pipeline,
-        search_spaces=SVM_param_space,
-        n_iter=150,
+        param_distributions=SVM_param_space,
+        n_iter=1000,
         scoring='f1',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
-        verbose=1,
+        verbose=0,
         refit=True
     )
 
