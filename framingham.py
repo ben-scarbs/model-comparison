@@ -147,7 +147,7 @@ XGB_impute = ColumnTransformer(
 )
 
 # Data Modes:
-data_mode = "smo"
+data_mode = "syn"
 #   - "raw" = No augmentation/synthesis
 #   - "smo" = Data synthesis using interpolated oversampling (SMOTE)
 #   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
@@ -255,13 +255,13 @@ LR_params = {
         "l1_ratio": 0.06363016933620981,
         "class_weight": "balanced"
     },
-    #
+    #LR Val: Accuracy = 0.6870 | Balanced = 0.7259 | F1 = 0.4322 | ROC AUC = 0.7708
     "smo": {
         "C": 0.0605970872518306,
         "l1_ratio": 0.9795269293354586,
         "class_weight": None
     },
-    #LR Val:...
+    #LR Val: Accuracy = 0.7368 | Balanced = 0.6434 | F1 = 0.3709 | ROC AUC = 0.7271
     "syn": {
         "C": 0.04497912998619529,
         "l1_ratio": 0.06363016933620981,
@@ -350,7 +350,7 @@ XGB_params = {
         "reg_lambda": 0.0,
         "scale_pos_weight": class_imbalance_weight
     },
-    #XGB Val:...
+    #XGB Val: Accuracy = 0.7202 | Balanced = 0.6187 | F1 = 0.3399 | ROC AUC = 0.6881
     "smo": {
         "n_estimators": 475,
         "learning_rate": 0.007948263801032772,
@@ -363,7 +363,7 @@ XGB_params = {
         "reg_lambda": 0.0,
         "scale_pos_weight": None
     },
-    #XGb Val:...
+    #XGB Val: Accuracy = 0.7424 | Balanced = 0.5423 | F1 = 0.2314 | ROC AUC = 0.6352
     "syn": {
         "n_estimators": 475,
         "learning_rate": 0.007948263801032772,
@@ -459,13 +459,13 @@ SVM_params = {
         "gamma": 0.024538678339873606,
         "class_weight": "balanced"
     },
-    #SVM Val:...
+    #SVM Val: Accuracy = 0.6842 | Balanced = 0.6795 | F1 = 0.3936 | ROC AUC = 0.7242
     "smo": {
         "C": 8470189.161873985,
         "gamma": 1.0494718319326697e-05,
         "class_weight": None
     },
-    #SVM Val:...
+    #SVM Val: Accuracy = 0.7258 | Balanced = 0.5922 | F1 = 0.3077 | ROC AUC = 0.7164
     "syn": {
         "C": 8470189.161873985,
         "gamma": 1.0494718319326697e-05,
