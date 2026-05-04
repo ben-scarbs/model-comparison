@@ -147,7 +147,7 @@ XGB_impute = ColumnTransformer(
 )
 
 # Data Modes:
-data_mode = "raw"
+data_mode = "smo"
 #   - "raw" = No augmentation/synthesis
 #   - "smo" = Data synthesis using interpolated oversampling (SMOTE)
 #   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
@@ -249,23 +249,23 @@ elif data_mode == "syn":
 #----Logisitc Regression----
 #--Model Hyperparameters--
 LR_params = {
-    #LR Val: Accuracy = 0.8532 | F1 = 0.0702 | ROC AUC = 0.7843
+    #LR Val: Accuracy = 0.6898 | Balanced = 0.7275 | F1 = 0.4343 | ROC AUC = 0.7791
     "raw": {
         "C": 0.04497912998619529,
         "l1_ratio": 0.06363016933620981,
         "class_weight": "balanced"
     },
-    #LR Val:...
+    #
     "smo": {
         "C": 0.0605970872518306,
         "l1_ratio": 0.9795269293354586,
-        "class_weight": "None"
+        "class_weight": None
     },
     #LR Val:...
     "syn": {
         "C": 0.04497912998619529,
         "l1_ratio": 0.06363016933620981,
-        "class_weight": "None"
+        "class_weight": None
     }
 }
 
@@ -337,7 +337,7 @@ if LR_hp_tuning:
 
 #--Model Hyperparameters--
 XGB_params = {
-    #XGB Val: Accuracy = 0.7036 | F1 = 0.4398 | ROC AUC = 0.7607
+    #XGB Val: Accuracy = 0.7036 | Balanced = 0.7282 | F1 = 0.4398 | ROC AUC = 0.7607
     "raw": {
         "n_estimators": 475,
         "learning_rate": 0.007948263801032772,
@@ -453,7 +453,7 @@ if XGB_hp_tuning:
 #----Support Vevtor Machine (SVM)----
 #--Model Hyperparameters--
 SVM_params = {
-    #SVM Val: Accuracy = 0.8504 | F1 = 0.0690 | ROC AUC = 0.7871
+    #SVM Val: Accuracy = 0.7036 | Balanced = 0.7357 | F1 = 0.4456 | ROC AUC = 0.7734
     "raw": {
         "C": 1.6231776795281112,
         "gamma": 0.024538678339873606,
