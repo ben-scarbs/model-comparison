@@ -38,7 +38,7 @@ def class_bal(labels):
 
 
 def get_transformed_feature_indices(transformer, original_features):
-    """Map original feature names to their column indices after transformation."""
+    #Map original feature names to their column indices after transformation.
     transformed_feature_names = transformer.get_feature_names_out()
     transformed_suffixes = [name.split("__", 1)[-1] for name in transformed_feature_names]
     return [idx for idx, name in enumerate(transformed_suffixes) if name in original_features]
