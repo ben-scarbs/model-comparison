@@ -36,6 +36,13 @@ def class_bal(labels):
     negative_class_num = (labels == 0).sum()
     print(f"Negative class balacne: {negative_class_num / labels.size:.4f}")
 
+
+def get_transformed_feature_indices(transformer, original_features):
+    """Map original feature names to their column indices after transformation."""
+    transformed_feature_names = transformer.get_feature_names_out()
+    transformed_suffixes = [name.split("__", 1)[-1] for name in transformed_feature_names]
+    return [idx for idx, name in enumerate(transformed_suffixes) if name in original_features]
+
 # cigsPerDay=0 when cuurentSmoker=0
 x.loc[x['currentSmoker'] == 0, 'cigsPerDay'] = 0
 
@@ -48,7 +55,6 @@ if missings_feature:
 # ['male', 'age', 'education', 'currentSmoker', 'cigsPerDay', 'BPMeds', 'prevalentStroke', 'prevalentHyp', 'diabetes', 'totChol', 'sysBP', 'diaBP', 'BMI', 'heartRate', 'glucose', 'TenYearCHD']
 # contains missing: ['education', 'cigsPerDay', 'BPMeds', 'totChol', 'BMI', 'heartRate','glucose']
 nominal_features = ["male", "currentSmoker", "BPMeds", "prevalentStroke", "prevalentHyp", "diabetes"]
-nominal_features_idx = [x.columns.get_loc(col) for col in nominal_features]
 ordinal_features = ["age", "education", "cigsPerDay"]
 continuous_features = ["totChol", "sysBP", "diaBP", "BMI", "heartRate", "glucose"]
 
@@ -117,17 +123,24 @@ if data_mode == "raw":
     x_train_oversampled_XGB, y_train_oversampled_XGB = x_train, y_train
     x_tval_oversampled_XGB, y_tval_oversampled_XGB = x_tval, y_tval
 
+    # Tuning params
+    LR_SVM_class_weight_tuning = [None, "balanced"]
+    XGB_class_weight_tuning = [None, class_imbalance_weight]
+
 elif data_mode == "smo":
+    nominal_features_idx = get_transformed_feature_indices(preprocessing_pipeline, nominal_features)
+    XGB_nominal_features_idx = get_transformed_feature_indices(XGB_impute, nominal_features)
     #--SMOTE data synthesis--
-    smote = SMOTENC(categorical_features= nominal_features_idx, sampling_strategy="minority")
+    smote = SMOTENC(categorical_features=nominal_features_idx, sampling_strategy="minority", random_state=0)
+    XGB_smote = SMOTENC(categorical_features=XGB_nominal_features_idx, sampling_strategy="minority", random_state=0)
 
     x_train_oversampled, y_train_oversampled = smote.fit_resample(x_train_processed, y_train)
     x_tval_oversampled, y_tval_oversampled = smote.fit_resample(x_tval_processed, y_tval)
 
     x_train_imp_XGB = XGB_impute.fit_transform(x_train, y_train)
-    x_train_imp_oversampled_XGB, y_train_imp_oversampled_XGB = smote.fit_resample(x_train_imp_XGB, y_train)
+    x_train_imp_oversampled_XGB, y_train_imp_oversampled_XGB = XGB_smote.fit_resample(x_train_imp_XGB, y_train)
     x_tval_imp_XGB = XGB_impute.fit_transform(x_tval, y_tval)
-    x_tval_imp_oversampled_XGB, y_tval_imp_oversampled_XGB = smote.fit_resample(x_tval_imp_XGB, y_tval)
+    x_tval_imp_oversampled_XGB, y_tval_imp_oversampled_XGB = XGB_smote.fit_resample(x_tval_imp_XGB, y_tval)
 
     XGB_x_train_synthetic = pd.DataFrame(
         x_train_imp_oversampled_XGB[len(x_train):],
@@ -150,6 +163,10 @@ elif data_mode == "smo":
     )
     x_tval_oversampled_XGB = pd.concat([x_tval, XGB_x_tval_synthetic], ignore_index=True)
     y_tval_oversampled_XGB = pd.concat([y_tval, XGB_y_tval_synthetic], ignore_index=True)
+
+    # Tuning params
+    LR_SVM_class_weight_tuning = [None]
+    XGB_class_weight_tuning = [None]
 
 elif data_mode == "syn":
     #--Gaussian Copulas data synthesis (SDV)--
@@ -186,6 +203,9 @@ elif data_mode == "syn":
     x_tval_oversampled = preprocessing_pipeline.fit_transform(x_tval_oversampled_XGB)
     y_tval_oversampled = y_tval_oversampled_XGB
 
+    # Tuning params
+    LR_SVM_class_weight_tuning = [None]
+    XGB_class_weight_tuning = [None]
 
 #----Logisitc Regression----
 #--Model Hyperparameters--
@@ -239,14 +259,14 @@ if LR_hp_tuning:
     LR_param_space = {
         "model__C": loguniform(1e-5, 1e5),
         "model__l1_ratio": uniform(0, 1),
-        "model__class_weight": [None, "balanced"]
+        "model__class_weight": LR_SVM_class_weight_tuning
     }
 
     LR_search = RandomizedSearchCV(
         estimator=LR_tuned_model_pipeline,
         param_distributions=LR_param_space,
-        n_iter=1000,
-        scoring='f1',
+        n_iter=500,
+        scoring='balanced-accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
@@ -355,19 +375,19 @@ if XGB_hp_tuning:
         "model__learning_rate": loguniform(5e-3, 0.1),
         "model__max_depth": randint(2, 6),
         "model__min_child_weight": randint(2, 6),
-        "model__subsample": uniform(0.6, 1.0),
-        "model__colsample_bytree": uniform(0.6, 1.0),
+        "model__subsample": uniform(0, 1.0),
+        "model__colsample_bytree": uniform(0, 1.0),
         "model__gamma": uniform(0.0, 1.0),
         "model__reg_alpha": uniform(0.0, 1.0),
         "model__reg_lambda": uniform(0.0, 5.0),
-        "model__scale_pos_weight": [None, class_imbalance_weight]
+        "model__scale_pos_weight": XGB_class_weight_tuning
     }
 
     XGB_search = RandomizedSearchCV(
         estimator=XGB_tuned_model_pipeline,
         param_distributions=XGB_param_space,
-        n_iter=1000,
-        scoring='f1',
+        n_iter=500,
+        scoring='balanced-accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
@@ -436,16 +456,16 @@ SVM_hp_tuning = True
 if SVM_hp_tuning:
     # SVM Hyperparameter Tuning
     SVM_param_space = {
-        "model__C": loguniform(1e-9, 1e9),
-        "model__gamma": loguniform(1e-9, 1e9),
-        "model__class_weight": [None, "balanced"]
+        "model__C": loguniform(1e-5, 1e5),
+        "model__gamma": loguniform(1e-5, 1e5),
+        "model__class_weight": LR_SVM_class_weight_tuning
     }
 
     SVM_search = RandomizedSearchCV(
         estimator=SVM_tuned_model_pipeline,
         param_distributions=SVM_param_space,
-        n_iter=1000,
-        scoring='f1',
+        n_iter=500,
+        scoring='balanced-accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
