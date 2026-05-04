@@ -599,7 +599,6 @@ if model_test:
     print(f"SVM Test: Accuracy = {SVM_test_accuracy:.4f} | Balanced = {SVM_test_balanced_accuracy:.4f} | F1 = {SVM_test_f1:.4f} | ROC AUC = {SVM_test_ROC:.4f}")
 
 
-
 #----ROC AUC curves----
 plot_ROC = False
 if plot_ROC:
