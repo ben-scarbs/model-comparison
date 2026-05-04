@@ -11,6 +11,7 @@ from sdv.sampling import Condition
 from sklearn.model_selection import train_test_split, StratifiedKFold, RandomizedSearchCV
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
+from sklearn.base import clone
 from sklearn.preprocessing import StandardScaler, FunctionTransformer, OneHotEncoder
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
@@ -42,6 +43,15 @@ def get_transformed_feature_indices(transformer, original_features):
     transformed_feature_names = transformer.get_feature_names_out()
     transformed_suffixes = [name.split("__", 1)[-1] for name in transformed_feature_names]
     return [idx for idx, name in enumerate(transformed_suffixes) if name in original_features]
+
+
+def transformed_array_to_dataframe(transformer, transformed_array, column_order=None):
+    transformed_feature_names = transformer.get_feature_names_out()
+    transformed_columns = [name.split("__", 1)[-1] for name in transformed_feature_names]
+    transformed_df = pd.DataFrame(transformed_array, columns=transformed_columns)
+    if column_order is not None:
+        transformed_df = transformed_df.loc[:, column_order]
+    return transformed_df
 
 # cigsPerDay=0 when cuurentSmoker=0
 x.loc[x['currentSmoker'] == 0, 'cigsPerDay'] = 0
@@ -129,7 +139,9 @@ if data_mode == "raw":
 
 elif data_mode == "smo":
     nominal_features_idx = get_transformed_feature_indices(preprocessing_pipeline, nominal_features)
-    XGB_nominal_features_idx = get_transformed_feature_indices(XGB_impute, nominal_features)
+    XGB_train_impute = clone(XGB_impute).fit(x_train, y_train)
+    XGB_tval_impute = clone(XGB_impute).fit(x_tval, y_tval)
+    XGB_nominal_features_idx = get_transformed_feature_indices(XGB_train_impute, nominal_features)
     #--SMOTE data synthesis--
     smote = SMOTENC(categorical_features=nominal_features_idx, sampling_strategy="minority", random_state=0)
     XGB_smote = SMOTENC(categorical_features=XGB_nominal_features_idx, sampling_strategy="minority", random_state=0)
@@ -137,14 +149,15 @@ elif data_mode == "smo":
     x_train_oversampled, y_train_oversampled = smote.fit_resample(x_train_processed, y_train)
     x_tval_oversampled, y_tval_oversampled = smote.fit_resample(x_tval_processed, y_tval)
 
-    x_train_imp_XGB = XGB_impute.fit_transform(x_train, y_train)
+    x_train_imp_XGB = XGB_train_impute.transform(x_train)
     x_train_imp_oversampled_XGB, y_train_imp_oversampled_XGB = XGB_smote.fit_resample(x_train_imp_XGB, y_train)
-    x_tval_imp_XGB = XGB_impute.fit_transform(x_tval, y_tval)
+    x_tval_imp_XGB = XGB_tval_impute.transform(x_tval)
     x_tval_imp_oversampled_XGB, y_tval_imp_oversampled_XGB = XGB_smote.fit_resample(x_tval_imp_XGB, y_tval)
 
-    XGB_x_train_synthetic = pd.DataFrame(
+    XGB_x_train_synthetic = transformed_array_to_dataframe(
+        XGB_train_impute,
         x_train_imp_oversampled_XGB[len(x_train):],
-        columns=x_train.columns
+        column_order=x_train.columns
     )
     XGB_y_train_synthetic = pd.Series(
         y_train_imp_oversampled_XGB[len(y_train):],
@@ -153,9 +166,10 @@ elif data_mode == "smo":
     x_train_oversampled_XGB = pd.concat([x_train, XGB_x_train_synthetic], ignore_index=True)
     y_train_oversampled_XGB = pd.concat([y_train, XGB_y_train_synthetic], ignore_index=True)
 
-    XGB_x_tval_synthetic = pd.DataFrame(
+    XGB_x_tval_synthetic = transformed_array_to_dataframe(
+        XGB_tval_impute,
         x_tval_imp_oversampled_XGB[len(x_tval):],
-        columns=x_tval.columns
+        column_order=x_tval.columns
     )
     XGB_y_tval_synthetic = pd.Series(
         y_tval_imp_oversampled_XGB[len(y_tval):],
@@ -464,7 +478,7 @@ if SVM_hp_tuning:
     SVM_search = RandomizedSearchCV(
         estimator=SVM_tuned_model_pipeline,
         param_distributions=SVM_param_space,
-        n_iter=500,
+        n_iter=100,
         scoring='balanced-accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
