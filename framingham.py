@@ -53,6 +53,31 @@ def transformed_array_to_dataframe(transformer, transformed_array, column_order=
         transformed_df = transformed_df.loc[:, column_order]
     return transformed_df
 
+
+def to_python_scalar(value):
+    return value.item() if isinstance(value, np.generic) else value
+
+
+def sample_minority_class_rows(synthesizer, features, labels, target_name):
+    label_counts = labels.value_counts()
+    minority_class = to_python_scalar(label_counts.idxmin())
+    samples_needed = int(label_counts.max() - label_counts.min())
+
+    if samples_needed <= 0:
+        empty_features = features.iloc[0:0].copy()
+        empty_labels = labels.iloc[0:0].copy()
+        return empty_features, empty_labels
+
+    condition = Condition(
+        num_rows=samples_needed,
+        column_values={target_name: minority_class}
+    )
+    synthetic = synthesizer.sample_from_conditions(conditions=[condition]).reset_index(drop=True)
+
+    synthetic_features = synthetic.drop(columns=target_name)
+    synthetic_labels = synthetic[target_name].rename(labels.name)
+    return synthetic_features, synthetic_labels
+
 # cigsPerDay=0 when cuurentSmoker=0
 x.loc[x['currentSmoker'] == 0, 'cigsPerDay'] = 0
 
@@ -122,7 +147,7 @@ XGB_impute = ColumnTransformer(
 )
 
 # Data Modes:
-data_mode = "smo"
+data_mode = "raw"
 #   - "raw" = No augmentation/synthesis
 #   - "smo" = Data synthesis using interpolated oversampling (SMOTE)
 #   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
@@ -195,26 +220,26 @@ elif data_mode == "syn":
     )
     gaussian_copula.fit(xy_train)
 
-    k_train_synthetic = np.abs((y_train == 0).sum() - (y_train == 1).sum())
-    train_condition = Condition(num_rows=k_train_synthetic, column_values={"TenYearCHD": 1})
-    train_synthetic = gaussian_copula.sample_from_conditions(conditions=[train_condition])
-    x_train_synthetic = train_synthetic.drop(columns="TenYearCHD")
-    y_train_synthetic = train_synthetic["TenYearCHD"]
-
-    x_train_oversampled_XGB = pd.concat([x_train, x_train_synthetic])
-    y_train_oversampled_XGB = pd.concat([y_train, y_train_synthetic])
-    x_train_oversampled = preprocessing_pipeline.fit_transform(x_train_oversampled_XGB)
+    x_train_synthetic, y_train_synthetic = sample_minority_class_rows(
+        gaussian_copula,
+        x_train,
+        y_train,
+        "TenYearCHD"
+    )
+    x_train_oversampled_XGB = pd.concat([x_train, x_train_synthetic], ignore_index=True)
+    y_train_oversampled_XGB = pd.concat([y_train, y_train_synthetic], ignore_index=True)
+    x_train_oversampled = preprocessing_pipeline.transform(x_train_oversampled_XGB)
     y_train_oversampled = y_train_oversampled_XGB
 
-    k_tval_synthetic = np.abs((y_tval == 0).sum() - (y_tval == 1).sum())
-    tval_condition = Condition(num_rows=k_tval_synthetic, column_values={"TenYearCHD": 1})
-    tval_synthetic = gaussian_copula.sample_from_conditions(conditions=[tval_condition])
-    x_tval_synthetic = tval_synthetic.drop(columns="TenYearCHD")
-    y_tval_synthetic = tval_synthetic["TenYearCHD"]
-
-    x_tval_oversampled_XGB = pd.concat([x_tval, x_tval_synthetic])
-    y_tval_oversampled_XGB = pd.concat([y_tval, y_tval_synthetic])
-    x_tval_oversampled = preprocessing_pipeline.fit_transform(x_tval_oversampled_XGB)
+    x_tval_synthetic, y_tval_synthetic = sample_minority_class_rows(
+        gaussian_copula,
+        x_tval,
+        y_tval,
+        "TenYearCHD"
+    )
+    x_tval_oversampled_XGB = pd.concat([x_tval, x_tval_synthetic], ignore_index=True)
+    y_tval_oversampled_XGB = pd.concat([y_tval, y_tval_synthetic], ignore_index=True)
+    x_tval_oversampled = preprocessing_pipeline.transform(x_tval_oversampled_XGB)
     y_tval_oversampled = y_tval_oversampled_XGB
 
     # Tuning params
@@ -232,15 +257,15 @@ LR_params = {
     },
     #LR Val:...
     "smo": {
-        "C": 0.04497912998619529,
-        "l1_ratio": 0.06363016933620981,
-        "class_weight": "balanced"
+        "C": 0.0605970872518306,
+        "l1_ratio": 0.9795269293354586,
+        "class_weight": "None"
     },
     #LR Val:...
     "syn": {
         "C": 0.04497912998619529,
         "l1_ratio": 0.06363016933620981,
-        "class_weight": "balanced"
+        "class_weight": "None"
     }
 }
 
@@ -266,7 +291,7 @@ LR_tuned_model_pipeline = Pipeline([
 
 # Hyperparameter Tuning
 # LR_hp_tuning = True to run hyperparameter tuning
-LR_hp_tuning = True
+LR_hp_tuning = False
 
 if LR_hp_tuning:
     # Logistic Regression Tuning
@@ -280,7 +305,7 @@ if LR_hp_tuning:
         estimator=LR_tuned_model_pipeline,
         param_distributions=LR_param_space,
         n_iter=500,
-        scoring='balanced-accuracy',
+        scoring='balanced_accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
@@ -301,7 +326,7 @@ if LR_hp_tuning:
 
     print("Logistic Regression:")
     print(f"Best score: {LR_search.best_score_}")
-    print(f"F1 | Base: {LR_base_score}; Untuned:{LR_pretuned_score}; Tuned: {LR_tuned_score}")
+    print(f"Balanced Accuracy | Base: {LR_base_score}; Untuned:{LR_pretuned_score}; Tuned: {LR_tuned_score}")
     print(LR_search.best_params_)
 
 
@@ -336,7 +361,7 @@ XGB_params = {
         "gamma": 1.0,
         "reg_alpha": 0.0,
         "reg_lambda": 0.0,
-        "scale_pos_weight": class_imbalance_weight
+        "scale_pos_weight": None
     },
     #XGb Val:...
     "syn": {
@@ -349,7 +374,7 @@ XGB_params = {
         "gamma": 1.0,
         "reg_alpha": 0.0,
         "reg_lambda": 0.0,
-        "scale_pos_weight": class_imbalance_weight
+        "scale_pos_weight": None
     }
 }
 
@@ -380,7 +405,7 @@ XGB_tuned_model_pipeline = Pipeline(steps=[
 
 # Hyperparameter Tuning
 # XGB_hp_tuning = True to run hyperparameter tuning
-XGB_hp_tuning = True
+XGB_hp_tuning = False
 
 if XGB_hp_tuning:
     # XGBoost Tuning
@@ -401,7 +426,7 @@ if XGB_hp_tuning:
         estimator=XGB_tuned_model_pipeline,
         param_distributions=XGB_param_space,
         n_iter=500,
-        scoring='balanced-accuracy',
+        scoring='balanced_accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
@@ -422,7 +447,7 @@ if XGB_hp_tuning:
 
     print("XGBoost:")
     print(f"Best score: {XGB_search.best_score_}")
-    print(f"F1 | Base: {XGB_base_score}; Untuned:{XGB_pretuned_score}; Tuned: {XGB_tuned_score}")
+    print(f"Balanced Accuracy | Base: {XGB_base_score}; Untuned:{XGB_pretuned_score}; Tuned: {XGB_tuned_score}")
     print(XGB_search.best_params_)
 
 #----Support Vevtor Machine (SVM)----
@@ -430,9 +455,9 @@ if XGB_hp_tuning:
 SVM_params = {
     #SVM Val: Accuracy = 0.8504 | F1 = 0.0690 | ROC AUC = 0.7871
     "raw": {
-        "C": 8470189.161873985,
-        "gamma": 1.0494718319326697e-05,
-        "class_weight": None
+        "C": 1.6231776795281112,
+        "gamma": 0.024538678339873606,
+        "class_weight": "balanced"
     },
     #SVM Val:...
     "smo": {
@@ -465,7 +490,7 @@ SVM_tuned_model_pipeline = Pipeline([
 
 # Hyperparameter Tuning
 # SVM_hp_tuning = True to run hyperparameter tuning
-SVM_hp_tuning = True
+SVM_hp_tuning = False
 
 if SVM_hp_tuning:
     # SVM Hyperparameter Tuning
@@ -479,7 +504,7 @@ if SVM_hp_tuning:
         estimator=SVM_tuned_model_pipeline,
         param_distributions=SVM_param_space,
         n_iter=100,
-        scoring='balanced-accuracy',
+        scoring='balanced_accuracy',
         cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=0),
         n_jobs=-1,
         random_state=0,
@@ -500,11 +525,11 @@ if SVM_hp_tuning:
 
     print("SVM:")
     print(f"Best score: {SVM_search.best_score_}")
-    print(f"F1 | Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
+    print(f"Balanced Accuracy | Base: {SVM_base_score}; Untuned:{SVM_pretuned_score}; Tuned: {SVM_tuned_score}")
     print(SVM_search.best_params_)
 
 #----Model evaluation----
-model_eval = False
+model_eval = True
 if model_eval:
     LR_val_model = LR_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
     LR_train_accuracy = accuracy_score(y_train_processed, LR_val_model.predict(x_train_processed))
