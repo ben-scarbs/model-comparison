@@ -96,7 +96,7 @@ continuous_features = ["totChol", "sysBP", "diaBP", "BMI", "heartRate", "glucose
 num_rows = df.shape[0]
 nan_rows=df.isna().any(axis=1).sum()
 #print(nan_rows/num_rows)
-#print(df.isna().sum())
+#print(df.isna().sum().sum())
 #print(df["education"].describe())
 #print(df.columns)
 #print(len(df.columns))
@@ -147,7 +147,7 @@ XGB_impute = ColumnTransformer(
 )
 
 # Data Modes:
-data_mode = "syn"
+data_mode = "raw"
 #   - "raw" = No augmentation/synthesis
 #   - "smo" = Data synthesis using interpolated oversampling (SMOTE)
 #   - "syn" = Advanced data synthesis (Copula moddeling or tVAE using SDV)
@@ -529,7 +529,7 @@ if SVM_hp_tuning:
     print(SVM_search.best_params_)
 
 #----Model evaluation----
-model_eval = True
+model_eval = False
 if model_eval:
     LR_val_model = LR_tuned_model_pipeline.fit(x_train_oversampled, y_train_oversampled)
     LR_train_accuracy = accuracy_score(y_train_processed, LR_val_model.predict(x_train_processed))
@@ -700,19 +700,23 @@ if SHAP:
     
     SVM_test_model = SVM_tuned_model_pipeline.fit(x_tval_oversampled, y_tval_oversampled)
     SVM_explainer = shap.Explainer(SVM_test_model.decision_function, x_tval_processed)
-    SVM_SHAP_values = SVM_explainer(x_test_processed)[:, :, 1]
+    SVM_SHAP_values = SVM_explainer(x_test_processed[:50])
     SVM_SHAP_importance = np.abs(SVM_SHAP_values.values).mean(axis=0)
 
-    # Plot bars by shifting x-positions
-    x_axis_locations = np.arange(len(x.columns))
-    width = 0.25
-    fig, ax = plt.subplots()
-    ax.bar(x_axis_locations - width/2, LR_SHAP_importance, width=width, label="Logistic Regression")
+    # Plot grouped bars with extra spacing between feature groups.
+    group_spacing = 1.3
+    x_axis_locations = np.arange(len(x.columns)) * group_spacing
+    width = 0.22
+    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.bar(x_axis_locations - width, LR_SHAP_importance, width=width, label="Logistic Regression")
     ax.bar(x_axis_locations, XGB_SHAP_importance, width=width, label="XGBoost")
-    ax.bar(x_axis_locations + width/2, SVM_SHAP_importance, width=width, label="SVM")
+    ax.bar(x_axis_locations + width, SVM_SHAP_importance, width=width, label="SVM")
 
     # Add labels and formatting
-    ax.set_xticks(x_axis_locations, rotation=60, ha="right", labels=x.columns)
+    ax.set_xticks(x_axis_locations, labels=x.columns, rotation=60, ha="right")
+    ax.set_xlim(x_axis_locations[0] - 2 * width, x_axis_locations[-1] + 2 * width)
+    ax.set_ylabel("Mean Absolute SHAP Value")
+    ax.set_title("SHAP Feature Importance by Model")
     ax.legend()
     plt.tight_layout()
     plt.show()
@@ -754,7 +758,3 @@ if plot_tSNE:
     plt.tight_layout()
     plt.show()
 
-
-#----Improvements----
-#   Data synthesis (SMOTE/tVAE)
-#   model based feature importance analysis
